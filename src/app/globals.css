@@ -2,25 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
-/* AgriX 視覚的アイデンティティ（計画書準拠） */
+/* Tech-Noir / Precision SaaS — Design Token (Linear/Vercel inspired) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  /* Forest Green - 農業の成長と信頼 */
-  --agrix-forest: #16a34a;
-  /* Slate Gray - プロ仕様の堅牢さ */
-  --agrix-slate: #334155;
+  --background: 240 5.9% 3.9%;       /* #09090b Zinc-950 */
+  --foreground: 0 0% 98%;            /* #fafafa Zinc-50 */
+  --card: 240 5.9% 10%;              /* #18181b Zinc-900 */
+  --card-foreground: 0 0% 98%;       /* #fafafa */
+  --primary: 217 91% 60%;            /* #3b82f6 Blue-500 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 4% 16%;           /* Zinc-800 */
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 4% 16%;               /* #27272a Zinc-800 */
+  --muted-foreground: 240 4% 65%;    /* #a1a1aa Zinc-400 */
+  --accent: 240 4% 16%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 240 4% 16%;              /* Zinc-800 */
+  --input: 240 4% 16%;
+  --ring: 217 91% 60%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dashboard-app {
+  --dashboard-bg: #09090b;
+  --dashboard-card: #18181b;
+  --dashboard-text: #fafafa;
+  --dashboard-muted: #a1a1aa;
+  --dashboard-border: #27272a;
+}
+
+.auth-theme {
+  --background: 240 5.9% 3.9%;
+  --foreground: 0 0% 98%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  background-color: #09090b;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-noto-sans-jp), sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-inter), Inter, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  a {
+    @apply text-inherit no-underline;
+  }
+  .focus-ring {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+}
+
+/* Glassmorphism utility */
+@layer utilities {
+  .glass {
+    @apply bg-card/80 backdrop-blur-md border border-border;
+  }
+  .glass-subtle {
+    @apply bg-card/60 backdrop-blur-sm border border-border/80;
+  }
+}
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
