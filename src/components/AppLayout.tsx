@@ -21,7 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const skipLayout = SKIP_LAYOUT_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-  const showDashboardLayout = !skipLayout && user && pathname !== "/";
+  const showDashboardLayout = !skipLayout && !!user;
 
   if (skipLayout) {
     return <>{children}</>;

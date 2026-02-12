@@ -1,21 +1,4 @@
 {
-  "/_not-found": "app/_not-found.js",
-  "/api/campaigns/calculate/route": "app/api/campaigns/calculate/route.js",
-  "/api/provider/reports/submit/route": "app/api/provider/reports/submit/route.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/(auth)/auth/callback/route": "app/(auth)/auth/callback/route.js",
-  "/(main)/admin/campaigns/new/page": "app/(main)/admin/campaigns/new/page.js",
-  "/(main)/admin/masters/page": "app/(main)/admin/masters/page.js",
-  "/(main)/admin/users/page": "app/(main)/admin/users/page.js",
-  "/(auth)/auth/pending-approval/page": "app/(auth)/auth/pending-approval/page.js",
-  "/(main)/my-fields/page": "app/(main)/my-fields/page.js",
-  "/(main)/provider/billings/page": "app/(main)/provider/billings/page.js",
-  "/(main)/page": "app/(main)/page.js",
-  "/(auth)/auth/verified/page": "app/(auth)/auth/verified/page.js",
-  "/(auth)/login/page": "app/(auth)/login/page.js",
-  "/(main)/mypage/page": "app/(main)/mypage/page.js",
-  "/(main)/provider/calendar/page": "app/(main)/provider/calendar/page.js",
-  "/(main)/admin/page": "app/(main)/admin/page.js",
-  "/(main)/provider/reports/new/page": "app/(main)/provider/reports/new/page.js",
-  "/(main)/requests/page": "app/(main)/requests/page.js"
+  "/(main)/page": "app/(main)/page.js"
 }
