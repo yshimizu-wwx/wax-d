@@ -47,6 +47,84 @@ export async function fetchActiveProject(): Promise<Project | null> {
 }
 
 /**
+ * Fetch open campaigns for public list (status=open, is_closed=false)
+ */
+export async function fetchOpenCampaigns(): Promise<Project[]> {
+    const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('status', 'open')
+        .eq('is_closed', false)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching open campaigns:', error)
+        return []
+    }
+    return (data as Project[]) || []
+}
+
+/**
+ * 農家の申込一覧（申込履歴）。farmer_id で紐づく予約を案件情報付きで取得。
+ */
+export interface FarmerBookingItem {
+    id: string
+    campaign_id: string
+    area_10r: number
+    status: string
+    work_status?: string
+    locked_price?: number
+    created_at?: string
+    project?: Pick<Project, 'id' | 'location' | 'campaign_title' | 'start_date' | 'end_date' | 'status' | 'is_closed'>
+}
+
+export async function fetchBookingsByFarmer(farmerId: string): Promise<FarmerBookingItem[]> {
+    const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select('id, campaign_id, area_10r, status, work_status, locked_price, created_at')
+        .eq('farmer_id', farmerId)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching farmer bookings:', error)
+        return []
+    }
+
+    const list = (bookings || []) as Array<{ id: string; campaign_id: string; area_10r?: number; status?: string; work_status?: string; locked_price?: number; created_at?: string }>
+    if (list.length === 0) return []
+
+    const campaignIds = [...new Set(list.map((b) => b.campaign_id))]
+    const { data: projects } = await supabase
+        .from('projects')
+        .select('id, location, campaign_title, start_date, end_date, status, is_closed')
+        .in('id', campaignIds)
+
+    const projectMap = new Map<string, FarmerBookingItem['project']>()
+    ;(projects || []).forEach((p: Record<string, unknown>) => {
+        projectMap.set(p.id as string, {
+            id: p.id as string,
+            location: (p.location as string) || '',
+            campaign_title: p.campaign_title as string | undefined,
+            start_date: p.start_date as string | undefined,
+            end_date: p.end_date as string | undefined,
+            status: p.status as string | undefined,
+            is_closed: p.is_closed as boolean | undefined,
+        })
+    })
+
+    return list.map((row) => ({
+        id: row.id,
+        campaign_id: row.campaign_id,
+        area_10r: Number(row.area_10r) || 0,
+        status: (row.status as string) || '',
+        work_status: row.work_status,
+        locked_price: row.locked_price != null ? Number(row.locked_price) : undefined,
+        created_at: row.created_at,
+        project: projectMap.get(row.campaign_id),
+    }))
+}
+
+/**
  * Fetch total applied area for a campaign
  */
 export async function fetchCampaignTotalArea(campaignId: string): Promise<number> {

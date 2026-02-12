@@ -171,16 +171,16 @@ export default function LoginPage() {
     return (
         <main className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
-                {/* Logo/Header */}
+                {/* Logo/Header - 計画書: Forest Green #16a34a, Slate #334155 */}
                 <div className="text-center mb-8">
-                    <h1 className="text-4xl font-black text-slate-800 mb-2">
-                        <span className="text-green-600">🌾</span> ドローンあいのり予約
+                    <h1 className="text-4xl font-black text-[#334155] mb-2">
+                        <span className="text-[#16a34a]">🌾</span> Wayfinder AgriX
                     </h1>
                     <p className="text-slate-500 font-medium">農家と業者をつなぐプラットフォーム</p>
                 </div>
 
-                {/* Auth Card */}
-                <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+                {/* Auth Card - 計画書: rounded-2xl, shadow-sm */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     {/* Tab Switcher */}
                     <div className="flex border-b border-slate-200">
                         <button
@@ -190,7 +190,7 @@ export default function LoginPage() {
                                 setSuccess(null);
                             }}
                             className={`flex-1 py-4 font-bold transition-colors ${isLogin
-                                    ? 'bg-green-600 text-white'
+                                    ? 'bg-[#16a34a] text-white'
                                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                                 }`}
                         >
@@ -203,7 +203,7 @@ export default function LoginPage() {
                                 setSuccess(null);
                             }}
                             className={`flex-1 py-4 font-bold transition-colors ${!isLogin
-                                    ? 'bg-green-600 text-white'
+                                    ? 'bg-[#16a34a] text-white'
                                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                                 }`}
                         >
@@ -214,14 +214,14 @@ export default function LoginPage() {
                     {/* Form Content */}
                     <div className="p-8">
                         {error && (
-                            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium">
+                            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-medium">
                                 <i className="fas fa-exclamation-circle mr-2"></i>
                                 {error}
                             </div>
                         )}
 
                         {success && (
-                            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm font-medium">
+                            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-2xl text-green-700 text-sm font-medium">
                                 <i className="fas fa-check-circle mr-2"></i>
                                 {success}
                             </div>
@@ -237,7 +237,7 @@ export default function LoginPage() {
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                         placeholder="example@example.com"
                                         required
                                     />
@@ -251,7 +251,7 @@ export default function LoginPage() {
                                         type="password"
                                         value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                        className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                         placeholder="••••••••"
                                         required
                                     />
@@ -260,7 +260,7 @@ export default function LoginPage() {
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="w-full bg-green-600 text-white py-4 rounded-xl font-black shadow-lg hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full bg-[#16a34a] text-white py-4 rounded-2xl font-black shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? (
                                         <>
@@ -283,8 +283,8 @@ export default function LoginPage() {
                                         <button
                                             type="button"
                                             onClick={() => setFormData({ ...formData, role: 'farmer' })}
-                                            className={`p-3 rounded-xl font-bold transition-all ${formData.role === 'farmer'
-                                                    ? 'bg-green-600 text-white shadow-lg'
+                                            className={`p-3 rounded-2xl font-bold transition-all shadow-sm ${formData.role === 'farmer'
+                                                    ? 'bg-[#16a34a] text-white'
                                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                                 }`}
                                         >
@@ -293,8 +293,8 @@ export default function LoginPage() {
                                         <button
                                             type="button"
                                             onClick={() => setFormData({ ...formData, role: 'provider' })}
-                                            className={`p-3 rounded-xl font-bold transition-all ${formData.role === 'provider'
-                                                    ? 'bg-blue-600 text-white shadow-lg'
+                                            className={`p-3 rounded-2xl font-bold transition-all shadow-sm ${formData.role === 'provider'
+                                                    ? 'bg-[#334155] text-white'
                                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                                 }`}
                                         >
@@ -311,7 +311,7 @@ export default function LoginPage() {
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                         placeholder="山田 太郎"
                                         required
                                     />
@@ -325,7 +325,7 @@ export default function LoginPage() {
                                         type="tel"
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                         placeholder="090-1234-5678"
                                         required
                                     />
@@ -339,7 +339,7 @@ export default function LoginPage() {
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                         placeholder="example@example.com"
                                         required
                                     />
@@ -353,7 +353,7 @@ export default function LoginPage() {
                                         type="password"
                                         value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                        className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                         placeholder="8文字以上"
                                         required
                                         minLength={8}
@@ -369,7 +369,7 @@ export default function LoginPage() {
                                             type="text"
                                             value={formData.invitationCode}
                                             onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value })}
-                                            className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-green-500"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-[#16a34a]"
                                             placeholder="業者から受け取った招待コード"
                                         />
                                         <p className="text-xs text-slate-500 mt-1">
@@ -381,7 +381,7 @@ export default function LoginPage() {
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="w-full bg-green-600 text-white py-4 rounded-xl font-black shadow-lg hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full bg-[#16a34a] text-white py-4 rounded-2xl font-black shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? (
                                         <>
@@ -400,7 +400,7 @@ export default function LoginPage() {
 
                 {/* Footer */}
                 <p className="text-center text-slate-500 text-sm mt-6">
-                    © 2026 ドローンあいのり予約. All rights reserved.
+                    © 2026 Wayfinder AgriX. All rights reserved.
                 </p>
             </div>
         </main>

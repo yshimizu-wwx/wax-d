@@ -2,9 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* AgriX 視覚的アイデンティティ（計画書準拠） */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Forest Green - 農業の成長と信頼 */
+  --agrix-forest: #16a34a;
+  /* Slate Gray - プロ仕様の堅牢さ */
+  --agrix-slate: #334155;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,5 +22,5 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-noto-sans-jp), sans-serif;
 }

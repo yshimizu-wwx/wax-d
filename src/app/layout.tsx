@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Noto_Sans_JP, Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import { Toaster } from "sonner";
 
-const fontSans = Inter({
-  variable: "--font-geist-sans",
+/** 本文・UI 用: 計画書「Noto Sans JP を主軸」 */
+const fontNoto = Noto_Sans_JP({
+  variable: "--font-noto-sans-jp",
   subsets: ["latin"],
+  weight: ["400", "500", "700", "900"],
 });
 
-const fontMono = JetBrains_Mono({
-  variable: "--font-geist-mono",
+/** 数字・データ表示用: 計画書「数字には Inter」 */
+const fontInter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -27,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body
-        className={`${fontSans.variable} ${fontMono.variable} antialiased`}
+        className={`${fontNoto.variable} ${fontInter.variable} font-sans antialiased`}
       >
         <Header />
         {children}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, Users, LogOut, FileText, Receipt } from 'lucide-react';
 import { getCurrentUser, signOut, type User } from '@/lib/auth';
 
 function getMyPageHref(role: string): string {
@@ -46,6 +46,33 @@ export default function Header() {
                                 <LayoutDashboard className="w-4 h-4" />
                                 マイページ
                             </Link>
+                            {user.role === 'farmer' && (
+                                <Link
+                                    href="/#applications"
+                                    className="text-sm font-bold text-slate-700 hover:text-green-600 transition-colors px-3 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1"
+                                >
+                                    <FileText className="w-4 h-4" />
+                                    申込履歴
+                                </Link>
+                            )}
+                            {user.role === 'provider' && (
+                                <>
+                                    <Link
+                                        href="/provider/reports/new"
+                                        className="text-sm font-bold text-slate-700 hover:text-green-600 transition-colors px-3 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1"
+                                    >
+                                        <FileText className="w-4 h-4" />
+                                        実績報告
+                                    </Link>
+                                    <Link
+                                        href="/provider/billings"
+                                        className="text-sm font-bold text-slate-700 hover:text-green-600 transition-colors px-3 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1"
+                                    >
+                                        <Receipt className="w-4 h-4" />
+                                        請求
+                                    </Link>
+                                </>
+                            )}
                             {(user.role === 'admin' || user.role === 'provider') && (
                                 <>
                                     <Link
