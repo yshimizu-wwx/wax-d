@@ -46,30 +46,30 @@ export default function PasswordChangeForm() {
   return (
     <Card>
       <CardContent className="p-6">
-        <h2 className="text-lg font-bold text-dashboard-text mb-4">パスワード変更</h2>
+        <h2 className="text-lg font-bold dark:text-white text-zinc-900 mb-4">パスワード変更</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="new-password">新しいパスワード</Label>
+            <Label htmlFor="new-password" className="dark:text-white text-zinc-900">新しいパスワード</Label>
             <Input
               id="new-password"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder={`${MIN_LENGTH}文字以上`}
-              className="mt-1"
+              className="mt-1 dark:text-white text-zinc-900 placeholder:dark:text-zinc-500 placeholder:text-zinc-400"
               minLength={MIN_LENGTH}
               autoComplete="new-password"
             />
           </div>
           <div>
-            <Label htmlFor="confirm-password">新しいパスワード（確認）</Label>
+            <Label htmlFor="confirm-password" className="dark:text-white text-zinc-900">新しいパスワード（確認）</Label>
             <Input
               id="confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="再入力"
-              className="mt-1"
+              className="mt-1 dark:text-white text-zinc-900 placeholder:dark:text-zinc-500 placeholder:text-zinc-400"
               autoComplete="new-password"
             />
           </div>

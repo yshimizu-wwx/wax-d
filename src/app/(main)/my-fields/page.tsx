@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Sprout, Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
@@ -13,6 +14,7 @@ import {
   type FieldData,
 } from '@/lib/api';
 import type { Field } from '@/types/database';
+import { getPolygonCenter } from '@/lib/geo/areaCalculator';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +28,15 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
+const PolygonMap = dynamic(() => import('@/components/PolygonMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full min-h-[280px] bg-dashboard-card animate-pulse rounded-lg flex items-center justify-center text-dashboard-muted text-sm">
+      地図を読み込み中...
+    </div>
+  ),
+});
+
 export default function MyFieldsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -36,6 +47,8 @@ export default function MyFieldsPage() {
   const [formName, setFormName] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formAreaSize, setFormAreaSize] = useState<string>('');
+  const [formLat, setFormLat] = useState<number | null>(null);
+  const [formLng, setFormLng] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -63,6 +76,8 @@ export default function MyFieldsPage() {
     setFormName('');
     setFormAddress('');
     setFormAreaSize('');
+    setFormLat(null);
+    setFormLng(null);
     setShowForm(true);
   };
 
@@ -79,9 +94,29 @@ export default function MyFieldsPage() {
     setEditingId(null);
   };
 
+  const handlePolygonComplete = useCallback(
+    (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: import('geojson').Polygon | null) => {
+      if (polygon && area10r > 0) {
+        setFormAreaSize(String(Math.round(area10r * 100) / 100));
+        const [lng, lat] = getPolygonCenter(polygon);
+        setFormLat(lat);
+        setFormLng(lng);
+      } else {
+        setFormAreaSize('');
+        setFormLat(null);
+        setFormLng(null);
+      }
+    },
+    []
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || user.role !== 'farmer') return;
+    if (!editingId && !formName.trim()) {
+      toast.error('畑の名前を入力してください');
+      return;
+    }
     setSubmitting(true);
     try {
       if (editingId) {
@@ -100,9 +135,11 @@ export default function MyFieldsPage() {
       } else {
         const data: FieldData = {
           farmer_id: user.id,
-          name: formName || undefined,
+          name: formName.trim() || undefined,
           address: formAddress || undefined,
           area_size: formAreaSize ? Number(formAreaSize) : undefined,
+          lat: formLat ?? undefined,
+          lng: formLng ?? undefined,
         };
         const result = await createField(data);
         if (result.success) {
@@ -213,13 +250,29 @@ export default function MyFieldsPage() {
         </Card>
 
         <Dialog open={showForm} onOpenChange={(open) => !open && closeForm()}>
-          <DialogContent>
+          <DialogContent className={!editingId ? 'max-w-2xl max-h-[90vh] overflow-hidden flex flex-col' : ''}>
             <DialogHeader>
               <DialogTitle>{editingId ? '畑を編集' : '畑を登録'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 flex flex-col min-h-0">
+              {!editingId && (
+                <div className="space-y-1 shrink-0">
+                  <Label>地図で範囲を選択</Label>
+                  <p className="text-xs text-dashboard-muted">地図上でポリゴン（多角形）を描くと面積が自動計算されます。</p>
+                  <div className="w-full min-h-[280px] rounded-lg overflow-hidden border border-dashboard-border">
+                    <PolygonMap
+                      onPolygonComplete={handlePolygonComplete}
+                      initialCenter={
+                        user && user.lat != null && user.lng != null
+                          ? [user.lat, user.lng]
+                          : undefined
+                      }
+                    />
+                  </div>
+                </div>
+              )}
               <div>
-                <Label htmlFor="fieldName">名称</Label>
+                <Label htmlFor="fieldName">畑の名前</Label>
                 <Input
                   id="fieldName"
                   value={formName}
@@ -247,11 +300,11 @@ export default function MyFieldsPage() {
                   step="0.1"
                   value={formAreaSize}
                   onChange={(e) => setFormAreaSize(e.target.value)}
-                  placeholder="例: 5.5"
+                  placeholder={editingId ? '例: 5.5' : '地図で描画すると自動入力'}
                   className="mt-1"
                 />
               </div>
-              <DialogFooter>
+              <DialogFooter className="shrink-0">
                 <Button type="button" variant="outline" onClick={closeForm}>
                   キャンセル
                 </Button>

@@ -48,7 +48,7 @@ export default function ProfileSettings() {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-dashboard-muted">読み込み中...</p>
+          <p className="dark:text-zinc-400 text-zinc-500">読み込み中...</p>
         </CardContent>
       </Card>
     );
@@ -58,7 +58,7 @@ export default function ProfileSettings() {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-dashboard-muted">ログインしてください。</p>
+          <p className="dark:text-zinc-400 text-zinc-500">ログインしてください。</p>
         </CardContent>
       </Card>
     );
@@ -67,47 +67,47 @@ export default function ProfileSettings() {
   return (
     <Card>
       <CardContent className="p-6">
-        <h2 className="text-lg font-bold text-dashboard-text mb-4">プロフィール</h2>
+        <h2 className="text-lg font-bold dark:text-white text-zinc-900 mb-4">プロフィール</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="profile-email">メールアドレス（ログインID）</Label>
+            <Label htmlFor="profile-email" className="dark:text-white text-zinc-900">メールアドレス（ログインID）</Label>
             <Input
               id="profile-email"
               value={user.email}
               disabled
-              className="mt-1 bg-slate-50"
+              className="mt-1 dark:bg-zinc-900 bg-zinc-50 dark:text-zinc-400 text-zinc-500"
             />
-            <p className="text-xs text-dashboard-muted mt-1">メールアドレスの変更はサポート対象外です。</p>
+            <p className="text-xs dark:text-zinc-400 text-zinc-500 mt-1">メールアドレスの変更はサポート対象外です。</p>
           </div>
           <div>
-            <Label htmlFor="profile-name">氏名</Label>
+            <Label htmlFor="profile-name" className="dark:text-white text-zinc-900">氏名</Label>
             <Input
               id="profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="氏名"
-              className="mt-1"
+              className="mt-1 dark:text-white text-zinc-900 placeholder:dark:text-zinc-500 placeholder:text-zinc-400"
             />
           </div>
           <div>
-            <Label htmlFor="profile-phone">電話番号</Label>
+            <Label htmlFor="profile-phone" className="dark:text-white text-zinc-900">電話番号</Label>
             <Input
               id="profile-phone"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="090-1234-5678"
-              className="mt-1"
+              className="mt-1 dark:text-white text-zinc-900 placeholder:dark:text-zinc-500 placeholder:text-zinc-400"
             />
           </div>
           <div>
-            <Label htmlFor="profile-address">住所</Label>
+            <Label htmlFor="profile-address" className="dark:text-white text-zinc-900">住所</Label>
             <Input
               id="profile-address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="住所・拠点"
-              className="mt-1"
+              className="mt-1 dark:text-white text-zinc-900 placeholder:dark:text-zinc-500 placeholder:text-zinc-400"
             />
           </div>
           <Button type="submit" disabled={submitting} className="bg-agrix-forest hover:bg-agrix-forest-dark">

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,11 +17,14 @@ import {
   CheckCircle,
 } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginPageContent() {
+  const searchParams = useSearchParams();
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [providerIdFromUrl, setProviderIdFromUrl] = useState<string | null>(null);
+  const [inviteProviderName, setInviteProviderName] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -30,6 +34,25 @@ export default function LoginPage() {
     role: 'farmer' as 'farmer' | 'provider',
     invitationCode: '',
   });
+
+  useEffect(() => {
+    const pid = searchParams.get('provider_id');
+    const signup = searchParams.get('signup');
+    if (pid && (signup === '1' || signup === 'true')) {
+      setProviderIdFromUrl(pid);
+      setIsLogin(false);
+      setFormData((prev) => ({ ...prev, role: 'farmer' }));
+      supabase
+        .from('users')
+        .select('id, name')
+        .eq('id', pid)
+        .eq('role', 'provider')
+        .single()
+        .then(({ data }) => {
+          if (data?.name) setInviteProviderName(data.name);
+        });
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,26 +118,41 @@ export default function LoginPage() {
         return;
       }
 
+      const metadata: Record<string, unknown> = {
+        name: formData.name,
+        phone: formData.phone,
+        role: formData.role,
+        invitation_code: formData.invitationCode || undefined,
+      };
+      if (formData.role === 'farmer' && providerIdFromUrl) {
+        metadata.provider_id = providerIdFromUrl;
+      }
+
       const { error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
-          data: { name: formData.name, phone: formData.phone, role: formData.role, invitation_code: formData.invitationCode },
+          data: metadata,
         },
       });
       if (authError) throw authError;
 
       const newId = (formData.role === 'farmer' ? 'F' : 'P') + Date.now();
       let associatedProviderId = formData.role === 'provider' ? newId : null;
-      if (formData.role === 'farmer' && formData.invitationCode) {
-        const { data: providerData } = await supabase
-          .from('users')
-          .select('id')
-          .eq('invitation_code', formData.invitationCode)
-          .eq('role', 'provider')
-          .single();
-        if (providerData) associatedProviderId = providerData.id;
+      if (formData.role === 'farmer' && (formData.invitationCode || providerIdFromUrl)) {
+        if (providerIdFromUrl) {
+          const { data: p } = await supabase.from('users').select('id').eq('id', providerIdFromUrl).eq('role', 'provider').single();
+          if (p) associatedProviderId = p.id;
+        } else {
+          const { data: providerData } = await supabase
+            .from('users')
+            .select('id')
+            .eq('invitation_code', formData.invitationCode)
+            .eq('role', 'provider')
+            .single();
+          if (providerData) associatedProviderId = providerData.id;
+        }
       }
 
       const { error: insertError } = await supabase.from('users').insert({
@@ -316,18 +354,29 @@ export default function LoginPage() {
                   />
                 </div>
                 {formData.role === 'farmer' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-invitation">招待コード（任意）</Label>
-                    <Input
-                      id="signup-invitation"
-                      type="text"
-                      value={formData.invitationCode}
-                      onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value })}
-                      placeholder="業者から受け取った招待コード"
-                      className="border-dashboard-border bg-dashboard-card"
-                    />
-                    <p className="text-xs text-dashboard-muted">業者から招待コードを受け取っている場合は入力してください</p>
-                  </div>
+                  <>
+                    {providerIdFromUrl && (
+                      <div className="p-3 rounded-xl bg-agrix-forest/10 border border-agrix-forest/30 text-agrix-forest text-sm">
+                        {inviteProviderName
+                          ? `「${inviteProviderName}」から招待されています。登録完了後に自動で紐付けられます。`
+                          : '招待リンクから登録されています。登録完了後に業者と自動で紐付けられます。'}
+                      </div>
+                    )}
+                    {!providerIdFromUrl && (
+                      <div className="space-y-2">
+                        <Label htmlFor="signup-invitation">招待コード（任意）</Label>
+                        <Input
+                          id="signup-invitation"
+                          type="text"
+                          value={formData.invitationCode}
+                          onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value })}
+                          placeholder="業者から受け取った招待コード"
+                          className="border-dashboard-border bg-dashboard-card"
+                        />
+                        <p className="text-xs text-dashboard-muted">業者から招待コードを受け取っている場合は入力してください</p>
+                      </div>
+                    )}
+                  </>
                 )}
                 <Button
                   type="submit"
@@ -363,5 +412,22 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen w-full flex flex-col items-center justify-center p-4 bg-dashboard-bg">
+          <div className="flex items-center gap-2 text-dashboard-muted">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>読み込み中...</span>
+          </div>
+        </main>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

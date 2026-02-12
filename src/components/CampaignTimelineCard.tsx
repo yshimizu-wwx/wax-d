@@ -31,9 +31,9 @@ export default function CampaignTimelineCard({
     base_price: campaign.base_price || 0,
     min_price: campaign.min_price || 0,
     target_area_10r: campaign.target_area_10r || 0,
-    min_target_area_10r: campaign.min_target_area_10r,
-    max_target_area_10r: campaign.max_target_area_10r,
-    execution_price: campaign.execution_price,
+    min_target_area_10r: campaign.min_target_area_10r ?? undefined,
+    max_target_area_10r: campaign.max_target_area_10r ?? undefined,
+    execution_price: campaign.execution_price ?? undefined,
   };
   const result = calculateCurrentUnitPrice(pricing, totalArea10r);
   const maxArea = campaign.max_target_area_10r || campaign.target_area_10r || 1;

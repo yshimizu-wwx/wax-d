@@ -46,16 +46,16 @@ export default function MypagePage() {
   return (
     <main className="min-h-full">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-        <h1 className="text-xl font-bold text-dashboard-text mb-2 flex items-center gap-2">
+        <h1 className="text-xl font-bold dark:text-white text-zinc-900 mb-2 flex items-center gap-2">
           <User className="w-6 h-6 text-agrix-forest" />
           マイページ
         </h1>
-        <p className="text-sm text-dashboard-muted mb-6">
+        <p className="text-sm dark:text-zinc-400 text-zinc-500 mb-6">
           プロフィールと認証情報を管理できます。
         </p>
 
         <section className="mb-8">
-          <h2 className="text-base font-bold text-dashboard-text mb-3 flex items-center gap-2">
+          <h2 className="text-base font-bold dark:text-white text-zinc-900 mb-3 flex items-center gap-2">
             <Settings className="w-4 h-4 text-agrix-forest" />
             プロフィール
           </h2>
@@ -63,7 +63,7 @@ export default function MypagePage() {
         </section>
 
         <section>
-          <h2 className="text-base font-bold text-dashboard-text mb-3 flex items-center gap-2">
+          <h2 className="text-base font-bold dark:text-white text-zinc-900 mb-3 flex items-center gap-2">
             <Key className="w-4 h-4 text-agrix-forest" />
             パスワード変更
           </h2>

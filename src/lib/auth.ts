@@ -1,5 +1,8 @@
 import { supabase } from './supabase';
+import { linkFarmerToProvider as linkFarmerToProviderService } from '@/services/auth.service';
+import type { UserRow } from '@/types/database';
 
+/** Current user shape for UI (subset of UserRow) */
 export interface User {
     id: string;
     email: string;
@@ -7,9 +10,11 @@ export interface User {
     name: string;
     phone: string;
     status: string;
-    address?: string;
-    associated_provider_id?: string;
-    invitation_code?: string;
+    address?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    associated_provider_id?: string | null;
+    invitation_code?: string | null;
 }
 
 /**
@@ -33,7 +38,20 @@ export async function getCurrentUser(): Promise<User | null> {
             return null;
         }
 
-        return userData as User;
+        const row = userData as UserRow;
+        return {
+            id: row.id,
+            email: row.email ?? '',
+            role: row.role,
+            name: row.name ?? '',
+            phone: row.phone ?? '',
+            status: row.status ?? '',
+            address: row.address ?? undefined,
+            lat: row.lat ?? undefined,
+            lng: row.lng ?? undefined,
+            associated_provider_id: row.associated_provider_id ?? undefined,
+            invitation_code: row.invitation_code ?? undefined,
+        } as User;
     } catch (error) {
         console.error('Error getting current user:', error);
         return null;
@@ -57,41 +75,11 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
- * Link a farmer to a provider via invitation code
+ * Link a farmer to a provider (invitation code or invite link).
+ * Enforces max FARMER_PROVIDERS_MAX links per farmer. Delegates to auth.service.
  */
 export async function linkFarmerToProvider(farmerId: string, providerId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        // Check if already linked
-        const { data: existing } = await supabase
-            .from('farmer_providers')
-            .select('*')
-            .eq('farmer_id', farmerId)
-            .eq('provider_id', providerId)
-            .eq('status', 'active')
-            .single();
-
-        if (existing) {
-            return { success: true }; // Already linked
-        }
-
-        // Insert new link
-        const { error } = await supabase
-            .from('farmer_providers')
-            .insert({
-                farmer_id: farmerId,
-                provider_id: providerId,
-                status: 'active',
-                created_at: new Date().toISOString(),
-            });
-
-        if (error) {
-            return { success: false, error: error.message };
-        }
-
-        return { success: true };
-    } catch (error: any) {
-        return { success: false, error: error.message };
-    }
+    return linkFarmerToProviderService(supabase, farmerId, providerId);
 }
 
 /**

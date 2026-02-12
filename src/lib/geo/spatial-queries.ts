@@ -58,7 +58,7 @@ export function isPointInCampaignPolygon(
  * - 畑に area_coordinates（ポリゴン）がある場合はポリゴン同士の重なり
  */
 export function isFieldInCampaignArea(
-  field: { lat?: number | null; lng?: number | null; area_coordinates?: string | null },
+  field: { lat?: number | null; lng?: number | null; area_coordinates?: string | null | unknown },
   campaignPolygon: Polygon | string | null | undefined
 ): boolean {
   const polygon = typeof campaignPolygon === 'string' || campaignPolygon == null

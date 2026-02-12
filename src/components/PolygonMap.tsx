@@ -24,9 +24,13 @@ L.Icon.Default.mergeOptions({
     shadowUrl: markerShadow.src,
 });
 
+const DEFAULT_CENTER: [number, number] = [35.6812, 139.7671];
+
 interface PolygonMapProps {
     onPolygonComplete: (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: Polygon | null) => void;
     initialPolygon?: { lat: number; lng: number }[];
+    /** 地図の初期中心（拠点座標）。未指定時は東京駅周辺 */
+    initialCenter?: [number, number];
 }
 
 function MapController({ onPolygonComplete, initialPolygon }: PolygonMapProps) {
@@ -113,7 +117,7 @@ function MapController({ onPolygonComplete, initialPolygon }: PolygonMapProps) {
 export default function PolygonMap(props: PolygonMapProps) {
     return (
         <MapContainer
-            center={[35.6812, 139.7671]} // Tokyo default
+            center={props.initialCenter ?? DEFAULT_CENTER}
             zoom={15}
             style={{ height: '100%', width: '100%', minHeight: '400px', borderRadius: '0.5rem' }}
         >

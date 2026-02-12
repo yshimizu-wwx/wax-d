@@ -15,6 +15,8 @@ import {
   Landmark,
   CircleDollarSign,
   CalendarRange,
+  Link2,
+  Copy,
 } from 'lucide-react';
 import AppLoader from '@/components/AppLoader';
 import { getCurrentUser, type User } from '@/lib/auth';
@@ -23,6 +25,7 @@ import { closeCampaign, fetchCampaignTotalArea } from '@/lib/api';
 import { calculateCurrentUnitPrice } from '@/lib/calculator/priceCalculator';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface UpcomingWork {
   id: string;
@@ -120,12 +123,12 @@ export default function AdminDashboardPage() {
               const total = idx >= 0 ? (totals as number[])[idx] ?? 0 : 0;
               const res = calculateCurrentUnitPrice(
                 {
-                  base_price: (openProj as any).base_price || 0,
-                  min_price: (openProj as any).min_price || 0,
-                  target_area_10r: (openProj as any).target_area_10r || 0,
-                  min_target_area_10r: (openProj as any).min_target_area_10r,
-                  max_target_area_10r: (openProj as any).max_target_area_10r,
-                  execution_price: (openProj as any).execution_price,
+                  base_price: openProj.base_price || 0,
+                  min_price: openProj.min_price || 0,
+                  target_area_10r: openProj.target_area_10r || 0,
+                  min_target_area_10r: openProj.min_target_area_10r ?? undefined,
+                  max_target_area_10r: openProj.max_target_area_10r ?? undefined,
+                  execution_price: openProj.execution_price ?? undefined,
                 },
                 total
               );
@@ -284,6 +287,47 @@ export default function AdminDashboardPage() {
                   <span className="text-dashboard-muted font-medium text-xl">—</span>
                 )}
               </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="mb-6">
+          <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">
+            <Link2 className="w-5 h-5 text-agrix-forest" />
+            農家招待リンク
+          </h2>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm text-dashboard-muted mb-3">
+                このリンクを農家に共有すると、新規登録時に貴社と自動で紐付きます（1農家あたり最大10業者まで）。
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 min-w-0 text-xs md:text-sm bg-dashboard-bg border border-dashboard-border rounded-lg px-3 py-2 break-all">
+                  {typeof window !== 'undefined'
+                    ? `${window.location.origin}/login?signup=1&provider_id=${user?.id ?? ''}`
+                    : `${user?.id ?? ''}`}
+                </code>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="shrink-0"
+                  onClick={() => {
+                    const url =
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/login?signup=1&provider_id=${user?.id ?? ''}`
+                        : '';
+                    if (url && navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText(url);
+                      toast.success('リンクをコピーしました');
+                    } else {
+                      toast.error('コピーに失敗しました');
+                    }
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-1" /> コピー
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </section>

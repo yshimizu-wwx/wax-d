@@ -43,9 +43,9 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
         base_price: project.base_price || 0,
         min_price: project.min_price || 0,
         target_area_10r: project.target_area_10r || 0,
-        min_target_area_10r: project.min_target_area_10r,
-        max_target_area_10r: project.max_target_area_10r,
-        execution_price: project.execution_price,
+        min_target_area_10r: project.min_target_area_10r ?? undefined,
+        max_target_area_10r: project.max_target_area_10r ?? undefined,
+        execution_price: project.execution_price ?? undefined,
     };
 
     // Calculate pricing in real-time using TOTAL campaign area (existing + new)

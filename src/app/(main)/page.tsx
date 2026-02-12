@@ -135,9 +135,9 @@ export default function Home() {
       base_price: selectedCampaign.base_price || 0,
       min_price: selectedCampaign.min_price || 0,
       target_area_10r: selectedCampaign.target_area_10r || 0,
-      min_target_area_10r: selectedCampaign.min_target_area_10r,
-      max_target_area_10r: selectedCampaign.max_target_area_10r,
-      execution_price: selectedCampaign.execution_price,
+      min_target_area_10r: selectedCampaign.min_target_area_10r ?? undefined,
+      max_target_area_10r: selectedCampaign.max_target_area_10r ?? undefined,
+      execution_price: selectedCampaign.execution_price ?? undefined,
     };
     const simulatedTotalArea = totalCampaignArea + area10r;
     const validation = calculateCurrentUnitPrice(pricing, simulatedTotalArea);
