@@ -46,7 +46,7 @@ export const AREA_CONSTANTS = {
  */
 export function calculatePolygonArea10r(polygon: Polygon): number {
   // Turf.jsで面積を平方メートルで計算（測地線計算）
-  const areaInSquareMeters = turf.area(polygon);
+  const areaInSquareMeters = turf.area(polygon) as number;
 
   // 1反 = 991.7355㎡ で換算
   const area10r = areaInSquareMeters / AREA_CONSTANTS.TAN_TO_SQUARE_METER;
@@ -182,7 +182,7 @@ export function calculateDistance(
   const to = turf.point(point2);
 
   // Turf.jsのdistance関数（デフォルトでkm単位）
-  return turf.distance(from, to, { units: 'kilometers' });
+  return turf.distance(from, to, { units: 'kilometers' }) as number;
 }
 
 /**
@@ -196,7 +196,7 @@ export function calculateDistance(
  * // => [139.6967, 35.6945]
  */
 export function getPolygonCenter(polygon: Polygon): Position {
-  const center = turf.center(polygon);
+  const center = turf.center(polygon) as { geometry: { coordinates: Position } };
   return center.geometry.coordinates;
 }
 
@@ -218,9 +218,9 @@ export function simplifyPolygon(
   const simplified = turf.simplify(feature, {
     tolerance,
     highQuality: true,
-  });
+  }) as { geometry: Polygon };
 
-  return simplified.geometry as Polygon;
+  return simplified.geometry;
 }
 
 /**
@@ -260,7 +260,7 @@ export function validatePolygon(polygon: Polygon): {
     }
 
     // 自己交差チェック
-    const kinks = turf.kinks(polygon);
+    const kinks = turf.kinks(polygon) as { features: unknown[] };
     if (kinks.features.length > 0) {
       return {
         isValid: false,
@@ -269,7 +269,7 @@ export function validatePolygon(polygon: Polygon): {
     }
 
     // 面積が0でないか
-    const area = turf.area(polygon);
+    const area = turf.area(polygon) as number;
     if (area === 0) {
       return {
         isValid: false,

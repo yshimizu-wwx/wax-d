@@ -5,7 +5,7 @@ import {
   Package,
   Layers,
   ListTree,
-  Spray,
+  Droplets,
   Plus,
   Pencil,
   Ban,
@@ -27,7 +27,7 @@ const TABS: { key: MasterType; label: string; icon: React.ReactNode }[] = [
   { key: 'crop', label: '品目', icon: <Package className="w-4 h-4" /> },
   { key: 'task_category', label: '作業種別', icon: <Layers className="w-4 h-4" /> },
   { key: 'task_detail', label: '作業詳細', icon: <ListTree className="w-4 h-4" /> },
-  { key: 'pesticide', label: '農薬', icon: <Spray className="w-4 h-4" /> },
+  { key: 'pesticide', label: '農薬', icon: <Droplets className="w-4 h-4" /> },
 ];
 
 export default function MastersPage() {

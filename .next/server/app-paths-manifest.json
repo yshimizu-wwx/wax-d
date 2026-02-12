@@ -1,0 +1,17 @@
+{
+  "/_not-found": "app/_not-found.js",
+  "/admin/campaigns/new/page": "app/admin/campaigns/new/page.js",
+  "/api/provider/reports/submit/route": "app/api/provider/reports/submit/route.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/masters/page": "app/admin/masters/page.js",
+  "/admin/users/page": "app/admin/users/page.js",
+  "/auth/callback/route": "app/auth/callback/route.js",
+  "/auth/pending-approval/page": "app/auth/pending-approval/page.js",
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/provider/calendar/page": "app/provider/calendar/page.js",
+  "/provider/reports/new/page": "app/provider/reports/new/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/auth/verified/page": "app/auth/verified/page.js",
+  "/provider/billings/page": "app/provider/billings/page.js"
+}

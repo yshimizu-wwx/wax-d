@@ -6,6 +6,7 @@ import { Loader2, MapPin, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateCurrentUnitPrice } from '@/lib/calculator/priceCalculator';
 import { fetchActiveProject, fetchCampaignTotalArea, createBooking, type BookingData } from '@/lib/api';
+import { getCurrentUser } from '@/lib/auth';
 import { Project } from '@/types/database';
 import type { Polygon } from 'geojson';
 import type { FarmerFormData } from '@/components/CampaignForm';
@@ -31,6 +32,16 @@ export default function Home() {
   const [polygon, setPolygon] = useState<Polygon | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number }[] | null>(null);
   const [totalCampaignArea, setTotalCampaignArea] = useState<number>(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+
+  // Load current user (for farmer_id when logged in as farmer)
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      if (u?.id) setCurrentUserId(u.id);
+      if (u?.role) setCurrentUserRole(u.role);
+    });
+  }, []);
 
   // Load active project and total area on mount
   useEffect(() => {
@@ -80,6 +91,7 @@ export default function Home() {
 
     const bookingData: BookingData = {
       campaign_id: project.id,
+      farmer_id: currentUserRole === 'farmer' && currentUserId ? currentUserId : undefined,
       farmer_name: formData.farmerName,
       phone: formData.phone,
       email: formData.email,

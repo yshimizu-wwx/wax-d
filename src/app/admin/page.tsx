@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { getCurrentUser, type User } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { closeCampaign } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface UpcomingWork {
   id: string;
@@ -24,6 +26,8 @@ interface UpcomingWork {
   confirmed_date: string;
   final_date: string;
   booking_count: number;
+  status: string;
+  is_closed: boolean;
 }
 
 export default function AdminDashboardPage() {
@@ -32,6 +36,7 @@ export default function AdminDashboardPage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [upcomingWork, setUpcomingWork] = useState<UpcomingWork[]>([]);
   const [openCampaignsCount, setOpenCampaignsCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -59,7 +64,7 @@ export default function AdminDashboardPage() {
     if (user.role === 'provider') {
       supabase
         .from('projects')
-        .select('id, campaign_title, location, final_date')
+        .select('id, campaign_title, location, final_date, status, is_closed')
         .eq('provider_id', user.id)
         .in('status', ['open', 'closed', 'applied'])
         .order('start_date', { ascending: true })
@@ -93,13 +98,15 @@ export default function AdminDashboardPage() {
                   confirmed_date: info.confirmed_date,
                   final_date: (p as any).final_date || '',
                   booking_count: info.count,
+                  status: (p as any).status ?? '',
+                  is_closed: (p as any).is_closed ?? false,
                 };
               });
               setUpcomingWork(list.slice(0, 5));
             });
         });
     }
-  }, [user]);
+  }, [user, refreshKey]);
 
   if (loading) {
     return (
@@ -204,8 +211,8 @@ export default function AdminDashboardPage() {
             ) : (
               <ul className="divide-y divide-slate-100">
                 {upcomingWork.map((w) => (
-                  <li key={w.id} className="p-4 flex items-center justify-between">
-                    <div>
+                  <li key={w.id} className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold text-slate-800">{w.campaign_title || w.location}</p>
                       <p className="text-sm text-slate-500">
                         {w.confirmed_date || w.final_date
@@ -213,14 +220,34 @@ export default function AdminDashboardPage() {
                           : '日付未確定'}
                         {' · '}
                         申込 {w.booking_count} 件
+                        {w.is_closed || w.status === 'closed' ? ' · 締切済' : ''}
                       </p>
                     </div>
-                    <Link
-                      href="/provider/calendar"
-                      className="text-sm font-bold text-green-600 hover:underline flex items-center gap-1"
-                    >
-                      カレンダー <ArrowRight className="w-4 h-4" />
-                    </Link>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!w.is_closed && (w.status === 'open' || w.status === 'applied') && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await closeCampaign(w.id);
+                            if (res.success) {
+                              toast.success('募集を締め切りました');
+                              setRefreshKey((k) => k + 1);
+                            } else {
+                              toast.error(res.error ?? '締切に失敗しました');
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-bold hover:bg-amber-200 border border-amber-300"
+                        >
+                          募集締切
+                        </button>
+                      )}
+                      <Link
+                        href="/provider/calendar"
+                        className="text-sm font-bold text-green-600 hover:underline flex items-center gap-1"
+                      >
+                        カレンダー <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </div>
                   </li>
                 ))}
               </ul>
