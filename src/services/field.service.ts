@@ -40,7 +40,7 @@ export async function fetchFieldsByFarmer(
     console.error('Error fetching fields:', error);
     return [];
   }
-  return (data as Field[]) ?? [];
+  return data ?? [];
 }
 
 /**

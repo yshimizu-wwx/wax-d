@@ -24,7 +24,21 @@ export async function fetchMasters(
     console.error('Error fetching masters:', error);
     return [];
   }
-  return (data as Master[]) || [];
+  return (data || []) as Master[];
+}
+
+/**
+ * Generate a UUID for masters.id (DB may use uuid type).
+ */
+function generateMasterId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 /**
@@ -37,7 +51,7 @@ export async function createMaster(
   parentId?: string | null
 ): Promise<{ success: boolean; error?: string; id?: string }> {
   try {
-    const id = `M_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = generateMasterId();
     const { error } = await supabase.from('masters').insert({
       id,
       provider_id: providerId,

@@ -5,11 +5,11 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
 import { createCampaign } from '@/lib/api';
-import { fetchMasters } from '@/lib/masters';
+import { fetchMasters, createMaster } from '@/lib/masters';
 import type { Master } from '@/types/database';
 import type { Polygon } from 'geojson';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 
 // Dynamically import PolygonMap to avoid SSR issues
 const PolygonMap = dynamic(() => import('@/components/PolygonMap'), {
@@ -61,6 +61,13 @@ export default function CampaignCreatePage() {
     const [taskCategories, setTaskCategories] = useState<Master[]>([]);
     const [taskDetails, setTaskDetails] = useState<Master[]>([]);
     const [mastersLoading, setMastersLoading] = useState(true);
+    const [showAddCrop, setShowAddCrop] = useState(false);
+    const [showAddCategory, setShowAddCategory] = useState(false);
+    const [showAddDetail, setShowAddDetail] = useState(false);
+    const [newCropName, setNewCropName] = useState('');
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [newDetailName, setNewDetailName] = useState('');
+    const [addingMaster, setAddingMaster] = useState(false);
 
     useEffect(() => {
         getCurrentUser().then((u) => {
@@ -89,6 +96,90 @@ export default function CampaignCreatePage() {
         return () => { cancelled = true; };
     }, [user, masterProviderId]);
 
+    const refetchMasters = async () => {
+        const [c, tc, td] = await Promise.all([
+            fetchMasters('crop', masterProviderId),
+            fetchMasters('task_category', masterProviderId),
+            fetchMasters('task_detail', masterProviderId),
+        ]);
+        setCrops(c.filter((m) => m.status === 'active'));
+        setTaskCategories(tc.filter((m) => m.status === 'active'));
+        setTaskDetails(td);
+    };
+
+    const handleAddCrop = async () => {
+        const name = newCropName.trim();
+        if (!name) {
+            toast.error('品目名を入力してください');
+            return;
+        }
+        setAddingMaster(true);
+        try {
+            const res = await createMaster('crop', name, masterProviderId);
+            if (res.success && res.id) {
+                await refetchMasters();
+                setFormData((prev) => ({ ...prev, cropId: res.id! }));
+                setNewCropName('');
+                setShowAddCrop(false);
+                toast.success('品目を追加しました');
+            } else {
+                toast.error(res.error || '追加に失敗しました');
+            }
+        } finally {
+            setAddingMaster(false);
+        }
+    };
+
+    const handleAddCategory = async () => {
+        const name = newCategoryName.trim();
+        if (!name) {
+            toast.error('作業種別名を入力してください');
+            return;
+        }
+        setAddingMaster(true);
+        try {
+            const res = await createMaster('task_category', name, masterProviderId);
+            if (res.success && res.id) {
+                await refetchMasters();
+                setFormData((prev) => ({ ...prev, categoryId: res.id!, detailId: '' }));
+                setNewCategoryName('');
+                setShowAddCategory(false);
+                toast.success('作業種別を追加しました');
+            } else {
+                toast.error(res.error || '追加に失敗しました');
+            }
+        } finally {
+            setAddingMaster(false);
+        }
+    };
+
+    const handleAddDetail = async () => {
+        const name = newDetailName.trim();
+        if (!name) {
+            toast.error('作業詳細名を入力してください');
+            return;
+        }
+        if (!formData.categoryId) {
+            toast.error('先に作業種別を選択してください');
+            return;
+        }
+        setAddingMaster(true);
+        try {
+            const res = await createMaster('task_detail', name, masterProviderId, formData.categoryId);
+            if (res.success && res.id) {
+                await refetchMasters();
+                setFormData((prev) => ({ ...prev, detailId: res.id! }));
+                setNewDetailName('');
+                setShowAddDetail(false);
+                toast.success('作業詳細を追加しました');
+            } else {
+                toast.error(res.error || '追加に失敗しました');
+            }
+        } finally {
+            setAddingMaster(false);
+        }
+    };
+
     const [formData, setFormData] = useState<CampaignFormData>({
         cropId: '',
         categoryId: '',
@@ -114,11 +205,13 @@ export default function CampaignCreatePage() {
         setCoords(newCoords);
         setArea10r(newArea10r);
         setPolygon(newPolygon);
+    };
 
-        // Enable step 2 when polygon is drawn
-        if (newPolygon && step === 1) {
-            setStep(2);
-        }
+    const goNext = () => {
+        if (step === 1 && polygon) setStep(2);
+    };
+    const goBack = () => {
+        if (step === 2) setStep(1);
     };
 
     const detailOptions = useMemo(() => {
@@ -186,7 +279,7 @@ export default function CampaignCreatePage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black text-dashboard-text tracking-tight">
-                                <span className="text-agrix-forest mr-2">🌾</span>新規案件作成
+                                新規案件作成
                             </h1>
                             <p className="text-dashboard-muted text-sm font-medium mt-1">業者用 - 募集案件を作成</p>
                         </div>
@@ -198,10 +291,20 @@ export default function CampaignCreatePage() {
                         </button>
                     </div>
                 </div>
+                {/* 細いプログレスバー（Step 1/2 → 50%, Step 2/2 → 100%） */}
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-dashboard-border">
+                    <div
+                        className="h-full bg-agrix-forest transition-all duration-300 ease-out"
+                        style={{ width: step === 1 ? '50%' : '100%' }}
+                    />
+                </div>
             </header>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
                 {/* Wizard Steps */}
+                <div className="flex items-center gap-2 mb-6 text-sm">
+                    <span className="text-dashboard-muted font-medium">Step {step}/2</span>
+                </div>
                 <Card className="flex items-center gap-2 mb-8 p-4">
                     <div className={`flex items-center gap-2 flex-1 ${step === 1 ? '' : 'opacity-100'}`}>
                         <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-black shrink-0 ${step >= 1 ? 'bg-agrix-forest text-white' : 'bg-dashboard-border text-dashboard-muted'}`}>
@@ -241,20 +344,45 @@ export default function CampaignCreatePage() {
                         </div>
 
                         {polygon && (
-                            <div className="mt-3 p-3 bg-agrix-forest/10 rounded-xl border border-agrix-forest/30">
-                                <div className="text-sm font-bold text-agrix-forest mb-1">
-                                    <i className="fas fa-check-circle mr-1"></i>エリアが登録されました
+                            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-agrix-forest/10 rounded-xl border border-agrix-forest/30">
+                                <div>
+                                    <div className="text-sm font-bold text-agrix-forest mb-1">
+                                        エリアが登録されました
+                                    </div>
+                                    <div className="text-xs text-agrix-forest">
+                                        面積: {area10r.toFixed(2)} 反
+                                    </div>
                                 </div>
-                                <div className="text-xs text-agrix-forest">
-                                    面積: {area10r.toFixed(2)} 反
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={goNext}
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-agrix-forest text-white font-bold hover:bg-agrix-forest-light transition-all duration-200 hover:shadow-lg"
+                                >
+                                    次へ進む <ArrowRight className="w-4 h-4" />
+                                </button>
                             </div>
                         )}
                         </CardContent>
                     </Card>
 
-                    {/* Step 2: Form Fields */}
-                    <div className={`space-y-6 transition-all duration-500 ${step === 2 ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                    {/* Step 2: Form Fields（スライドで表示） */}
+                    <div
+                        className={`overflow-hidden transition-all duration-300 ease-out ${
+                            step === 2
+                                ? 'opacity-100 translate-x-0 max-h-[9999px]'
+                                : 'opacity-0 translate-x-4 max-h-0 pointer-events-none'
+                        }`}
+                    >
+                        <div className="space-y-6">
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                onClick={goBack}
+                                className="inline-flex items-center gap-2 text-dashboard-muted hover:text-dashboard-text font-bold text-sm"
+                            >
+                                <ArrowLeft className="w-4 h-4" /> エリア描画に戻る
+                            </button>
+                        </div>
                         <Card>
                             <CardContent className="p-6">
                             <label className="block text-xs font-bold text-dashboard-text uppercase mb-4">
@@ -291,8 +419,28 @@ export default function CampaignCreatePage() {
                                                     <option key={m.id} value={m.id}>{m.name}</option>
                                                 ))}
                                             </select>
-                                            {crops.length === 0 && (
-                                                <p className="text-xs text-destructive mt-1">品目が未登録です。マスタ画面で追加してください。</p>
+                                            {crops.length === 0 && !showAddCrop && (
+                                                <p className="text-xs text-dashboard-muted mt-1">品目がありません。下で追加できます。</p>
+                                            )}
+                                            {showAddCrop ? (
+                                                <div className="mt-2 flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newCropName}
+                                                        onChange={(e) => setNewCropName(e.target.value)}
+                                                        placeholder="例: りんご"
+                                                        className="flex-1 px-3 py-2 text-sm bg-dashboard-bg rounded-lg border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text"
+                                                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCrop())}
+                                                    />
+                                                    <button type="button" onClick={handleAddCrop} disabled={addingMaster} className="shrink-0 px-3 py-2 text-sm font-medium rounded-lg bg-agrix-forest hover:bg-agrix-forest-dark text-white disabled:opacity-50">
+                                                        {addingMaster ? '追加中...' : '登録'}
+                                                    </button>
+                                                    <button type="button" onClick={() => { setShowAddCrop(false); setNewCropName(''); }} className="shrink-0 px-3 py-2 text-sm rounded-lg border border-dashboard-border text-dashboard-muted hover:bg-dashboard-card">キャンセル</button>
+                                                </div>
+                                            ) : (
+                                                <button type="button" onClick={() => setShowAddCrop(true)} className="mt-1 text-xs text-agrix-forest hover:underline">
+                                                    ＋ 新しい品目を追加
+                                                </button>
                                             )}
                                         </div>
                                         <div>
@@ -310,8 +458,28 @@ export default function CampaignCreatePage() {
                                                     <option key={m.id} value={m.id}>{m.name}</option>
                                                 ))}
                                             </select>
-                                            {taskCategories.length === 0 && (
-                                                <p className="text-xs text-destructive mt-1">作業種別が未登録です。マスタ画面で追加してください。</p>
+                                            {taskCategories.length === 0 && !showAddCategory && (
+                                                <p className="text-xs text-dashboard-muted mt-1">作業種別がありません。下で追加できます。</p>
+                                            )}
+                                            {showAddCategory ? (
+                                                <div className="mt-2 flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newCategoryName}
+                                                        onChange={(e) => setNewCategoryName(e.target.value)}
+                                                        placeholder="例: 防除"
+                                                        className="flex-1 px-3 py-2 text-sm bg-dashboard-bg rounded-lg border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text"
+                                                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
+                                                    />
+                                                    <button type="button" onClick={handleAddCategory} disabled={addingMaster} className="shrink-0 px-3 py-2 text-sm font-medium rounded-lg bg-agrix-forest hover:bg-agrix-forest-dark text-white disabled:opacity-50">
+                                                        {addingMaster ? '追加中...' : '登録'}
+                                                    </button>
+                                                    <button type="button" onClick={() => { setShowAddCategory(false); setNewCategoryName(''); }} className="shrink-0 px-3 py-2 text-sm rounded-lg border border-dashboard-border text-dashboard-muted hover:bg-dashboard-card">キャンセル</button>
+                                                </div>
+                                            ) : (
+                                                <button type="button" onClick={() => setShowAddCategory(true)} className="mt-1 text-xs text-agrix-forest hover:underline">
+                                                    ＋ 新しい作業種別を追加
+                                                </button>
                                             )}
                                         </div>
                                         <div>
@@ -330,8 +498,30 @@ export default function CampaignCreatePage() {
                                                     <option key={m.id} value={m.id}>{m.name}</option>
                                                 ))}
                                             </select>
-                                            {formData.categoryId && detailOptions.length === 0 && (
-                                                <p className="text-xs text-destructive mt-1">この作業種別に紐づく作業詳細がありません。マスタ画面で追加してください。</p>
+                                            {formData.categoryId && detailOptions.length === 0 && !showAddDetail && (
+                                                <p className="text-xs text-dashboard-muted mt-1">この作業種別に紐づく作業詳細がありません。下で追加できます。</p>
+                                            )}
+                                            {formData.categoryId && (
+                                                showAddDetail ? (
+                                                    <div className="mt-2 flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={newDetailName}
+                                                            onChange={(e) => setNewDetailName(e.target.value)}
+                                                            placeholder="例: 散布"
+                                                            className="flex-1 px-3 py-2 text-sm bg-dashboard-bg rounded-lg border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text"
+                                                            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDetail())}
+                                                        />
+                                                        <button type="button" onClick={handleAddDetail} disabled={addingMaster} className="shrink-0 px-3 py-2 text-sm font-medium rounded-lg bg-agrix-forest hover:bg-agrix-forest-dark text-white disabled:opacity-50">
+                                                            {addingMaster ? '追加中...' : '登録'}
+                                                        </button>
+                                                        <button type="button" onClick={() => { setShowAddDetail(false); setNewDetailName(''); }} className="shrink-0 px-3 py-2 text-sm rounded-lg border border-dashboard-border text-dashboard-muted hover:bg-dashboard-card">キャンセル</button>
+                                                    </div>
+                                                ) : (
+                                                    <button type="button" onClick={() => setShowAddDetail(true)} className="mt-1 text-xs text-agrix-forest hover:underline">
+                                                        ＋ 新しい作業詳細を追加
+                                                    </button>
+                                                )
                                             )}
                                         </div>
                                     </div>
@@ -353,7 +543,7 @@ export default function CampaignCreatePage() {
                                         value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                         placeholder="例: 山内地区"
-                                        className="w-full p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest"
+                                        className="w-full p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text placeholder:text-dashboard-muted"
                                         required
                                     />
                                 </div>
@@ -367,7 +557,7 @@ export default function CampaignCreatePage() {
                                             type="date"
                                             value={formData.startDate}
                                             onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                            className="w-full p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest"
+                                            className="w-full p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text"
                                             required
                                         />
                                     </div>
@@ -379,7 +569,7 @@ export default function CampaignCreatePage() {
                                             type="date"
                                             value={formData.endDate}
                                             onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                            className="w-full p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest"
+                                            className="w-full p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text"
                                             required
                                         />
                                     </div>
@@ -402,7 +592,7 @@ export default function CampaignCreatePage() {
                                                 value={formData.basePrice || ''}
                                                 onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
                                                 placeholder="例: 20000"
-                                                className="flex-1 p-4 text-sm font-bold outline-none rounded-l-2xl"
+                                                className="flex-1 p-4 text-sm font-bold outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                                 required
                                             />
                                             <span className="px-3 text-sm text-dashboard-muted font-bold">¥/10R</span>
@@ -421,7 +611,7 @@ export default function CampaignCreatePage() {
                                                 value={formData.minPrice || ''}
                                                 onChange={(e) => setFormData({ ...formData, minPrice: Number(e.target.value) })}
                                                 placeholder="例: 15000"
-                                                className="flex-1 p-4 text-sm font-bold outline-none rounded-l-2xl"
+                                                className="flex-1 p-4 text-sm font-bold outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                                 required
                                             />
                                             <span className="px-3 text-sm text-dashboard-muted font-bold">¥/10R</span>
@@ -446,7 +636,7 @@ export default function CampaignCreatePage() {
                                         value={formData.minTargetArea10r || ''}
                                         onChange={(e) => setFormData({ ...formData, minTargetArea10r: Number(e.target.value) || 0 })}
                                         placeholder="例: 30（空欄可）"
-                                        className="flex-1 p-4 text-sm outline-none rounded-l-2xl"
+                                        className="flex-1 p-4 text-sm outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                     />
                                     <span className="px-3 text-sm text-dashboard-muted font-bold">10R</span>
                                 </div>
@@ -465,7 +655,7 @@ export default function CampaignCreatePage() {
                                         value={formData.targetArea10r || ''}
                                         onChange={(e) => setFormData({ ...formData, targetArea10r: Number(e.target.value) })}
                                         placeholder="例: 50"
-                                        className="flex-1 p-4 text-sm outline-none rounded-l-2xl"
+                                        className="flex-1 p-4 text-sm outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                         required
                                     />
                                     <span className="px-3 text-sm text-dashboard-muted font-bold">10R</span>
@@ -483,13 +673,12 @@ export default function CampaignCreatePage() {
                                         <i className="fas fa-spinner fa-spin mr-2"></i>作成中...
                                     </>
                                 ) : (
-                                    <>
-                                        <i className="fas fa-paper-plane mr-2"></i>案件を公開する
-                                    </>
+                                    <>案件を公開する</>
                                 )}
                             </button>
                             </CardContent>
                         </Card>
+                        </div>
                     </div>
                 </form>
             </div>

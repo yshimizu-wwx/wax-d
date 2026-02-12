@@ -22,7 +22,7 @@ interface BookingRow {
   farmer_id: string | null;
   area_10r: number;
   actual_area_10r: number | null;
-  work_status: string;
+  work_status: string | null;
   final_amount: number | null;
   invoice_status: string | null;
 }
@@ -54,7 +54,7 @@ export default function ProviderBillingsPage() {
       setUser(u as { id: string });
 
       const { data: projects } = await supabase
-        .from('projects')
+        .from('campaigns')
         .select('id, campaign_title, location, final_date, status')
         .eq('provider_id', u.id);
       if (!projects?.length) {

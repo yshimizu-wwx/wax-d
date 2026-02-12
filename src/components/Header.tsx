@@ -14,7 +14,6 @@ export default function Header() {
             href="/"
             className="text-dashboard-text font-bold text-lg truncate hover:text-agrix-forest transition-colors flex items-center gap-1.5"
           >
-            <span className="text-agrix-forest" aria-hidden>🌾</span>
             <span>{APP_NAME}</span>
           </Link>
         </div>

@@ -267,6 +267,12 @@ export default function MyFieldsPage() {
                           ? [user.lat, user.lng]
                           : undefined
                       }
+                      initialAddress={
+                        user && (user.lat == null || user.lng == null) && user.address
+                          ? user.address
+                          : undefined
+                      }
+                      showAddressSearch
                     />
                   </div>
                 </div>

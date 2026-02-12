@@ -40,7 +40,7 @@ export interface CampaignCreateResult {
  */
 export async function fetchOpenCampaigns(supabase: SupabaseClient): Promise<Project[]> {
   const { data, error } = await supabase
-    .from('projects')
+    .from('campaigns')
     .select('*')
     .eq('status', 'open')
     .eq('is_closed', false)
@@ -50,7 +50,7 @@ export async function fetchOpenCampaigns(supabase: SupabaseClient): Promise<Proj
     console.error('Error fetching open campaigns:', error);
     return [];
   }
-  return (data as Project[]) ?? [];
+  return data ?? [];
 }
 
 /**
@@ -58,7 +58,7 @@ export async function fetchOpenCampaigns(supabase: SupabaseClient): Promise<Proj
  */
 export async function fetchActiveProject(supabase: SupabaseClient): Promise<Project | null> {
   const { data, error } = await supabase
-    .from('projects')
+    .from('campaigns')
     .select('*')
     .eq('status', 'open')
     .eq('is_closed', false)
@@ -71,7 +71,7 @@ export async function fetchActiveProject(supabase: SupabaseClient): Promise<Proj
     console.error('Error fetching active project:', error);
     return null;
   }
-  return data as Project | null;
+  return data;
 }
 
 /**
@@ -111,7 +111,7 @@ export async function createCampaign(
     const campaignId = `C_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     const { data, error } = await supabase
-      .from('projects')
+      .from('campaigns')
       .insert({
         id: campaignId,
         provider_id: providerId ?? null,
@@ -163,7 +163,7 @@ export async function closeCampaign(
   campaignId: string
 ): Promise<{ success: boolean; error?: string }> {
   const { data: project, error: fetchErr } = await supabase
-    .from('projects')
+    .from('campaigns')
     .select('id, base_price, min_price, target_area_10r, min_target_area_10r, max_target_area_10r, execution_price')
     .eq('id', campaignId)
     .single();
@@ -186,7 +186,7 @@ export async function closeCampaign(
     result.currentPrice ?? pricing.min_price ?? pricing.base_price ?? 0;
 
   const { error: updateProjectErr } = await supabase
-    .from('projects')
+    .from('campaigns')
     .update({
       status: 'closed',
       is_closed: true,
@@ -218,7 +218,7 @@ export async function setCampaignCompleted(
   campaignId: string
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase
-    .from('projects')
+    .from('campaigns')
     .update({ status: 'completed' })
     .eq('id', campaignId);
   if (error) return { success: false, error: error.message };

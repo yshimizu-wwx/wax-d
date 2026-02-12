@@ -84,5 +84,5 @@ export async function fetchWorkRequestsByFarmer(
     console.error('Error fetching work requests:', error);
     return [];
   }
-  return (data as WorkRequest[]) ?? [];
+  return data ?? [];
 }

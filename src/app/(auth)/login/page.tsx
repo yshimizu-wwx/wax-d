@@ -181,7 +181,6 @@ function LoginPageContent() {
       <div className="w-full max-w-md flex flex-col items-center">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-dashboard-text tracking-tight flex items-center justify-center gap-2">
-            <span className="text-agrix-forest" aria-hidden>🌾</span>
             Wayfinder AgriX Drone
           </h1>
           <p className="text-dashboard-muted font-medium mt-2 text-base">
@@ -189,7 +188,7 @@ function LoginPageContent() {
           </p>
         </div>
 
-        <Card className="w-full max-w-md border border-dashboard-border shadow-xl overflow-hidden rounded-2xl">
+        <Card className="w-full max-w-md border border-dashboard-border shadow-xl overflow-hidden rounded-2xl transition-all duration-200 hover:shadow-2xl hover:border-dashboard-border/90">
           <div className="flex border-b border-dashboard-border">
             <Button
               type="button"
@@ -248,9 +247,9 @@ function LoginPageContent() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="example@example.com"
+                    placeholder="登録したメールアドレスを入力しましょう"
                     required
-                    className="border-dashboard-border bg-dashboard-card"
+                    className="border-dashboard-border bg-dashboard-card rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
@@ -260,15 +259,16 @@ function LoginPageContent() {
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="••••••••"
+                    placeholder="パスワードを入力してください"
                     required
-                    className="border-dashboard-border bg-dashboard-card"
+                    className="border-dashboard-border bg-dashboard-card rounded-xl"
                   />
+                  <p className="text-xs text-dashboard-muted">忘れた場合は再設定から変更できます</p>
                 </div>
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-12 font-bold rounded-xl bg-agrix-forest text-white hover:bg-agrix-forest-light border-0"
+                  className="w-full h-12 font-bold rounded-xl bg-agrix-forest text-white hover:bg-agrix-forest-light border-0 transition-all duration-200 hover:shadow-lg"
                 >
                   {isLoading ? (
                     <>
@@ -311,9 +311,9 @@ function LoginPageContent() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="山田 太郎"
+                    placeholder="お名前を教えてください"
                     required
-                    className="border-dashboard-border bg-dashboard-card"
+                    className="border-dashboard-border bg-dashboard-card rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
@@ -323,10 +323,11 @@ function LoginPageContent() {
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="090-1234-5678"
+                    placeholder="連絡のつく番号を入力しましょう"
                     required
-                    className="border-dashboard-border bg-dashboard-card"
+                    className="border-dashboard-border bg-dashboard-card rounded-xl"
                   />
+                  <p className="text-xs text-dashboard-muted">作業のご連絡に使います。後から変更できます</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">メールアドレス</Label>
@@ -335,9 +336,9 @@ function LoginPageContent() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="example@example.com"
+                    placeholder="ログインに使うメールアドレスは？"
                     required
-                    className="border-dashboard-border bg-dashboard-card"
+                    className="border-dashboard-border bg-dashboard-card rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
@@ -347,11 +348,12 @@ function LoginPageContent() {
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="8文字以上"
+                    placeholder="8文字以上で決めましょう"
                     required
                     minLength={8}
-                    className="border-dashboard-border bg-dashboard-card"
+                    className="border-dashboard-border bg-dashboard-card rounded-xl"
                   />
+                  <p className="text-xs text-dashboard-muted">安全のため、他人に推測されにくいものにしてください</p>
                 </div>
                 {formData.role === 'farmer' && (
                   <>
@@ -370,10 +372,10 @@ function LoginPageContent() {
                           type="text"
                           value={formData.invitationCode}
                           onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value })}
-                          placeholder="業者から受け取った招待コード"
-                          className="border-dashboard-border bg-dashboard-card"
+                          placeholder="業者からもらった招待コードがあれば入力"
+                          className="border-dashboard-border bg-dashboard-card rounded-xl"
                         />
-                        <p className="text-xs text-dashboard-muted">業者から招待コードを受け取っている場合は入力してください</p>
+                        <p className="text-xs text-dashboard-muted">持っていなければ空欄のままで大丈夫です</p>
                       </div>
                     )}
                   </>
@@ -381,7 +383,7 @@ function LoginPageContent() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-12 font-bold rounded-xl bg-agrix-forest text-white hover:bg-agrix-forest-light border-0"
+                  className="w-full h-12 font-bold rounded-xl bg-agrix-forest text-white hover:bg-agrix-forest-light border-0 transition-all duration-200 hover:shadow-lg"
                 >
                   {isLoading ? (
                     <>
@@ -389,7 +391,7 @@ function LoginPageContent() {
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-4 h-4" /> 新規登録
+                      <UserPlus className="w-4 h-4" /> 登録を進める
                     </>
                   )}
                 </Button>

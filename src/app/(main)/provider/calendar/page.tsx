@@ -25,7 +25,7 @@ export default function ProviderCalendarPage() {
       setUser(u as { id: string });
 
       const { data: projData } = await supabase
-        .from('projects')
+        .from('campaigns')
         .select('id, start_date, end_date, final_date, campaign_title, location, status')
         .eq('provider_id', u.id);
       setProjects(projData || []);

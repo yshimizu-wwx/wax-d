@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed:test-accounts": "node scripts/seed-test-accounts.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed:test-accounts": "node scripts/seed-test-accounts.mjs",
+    "gen:types": "npx supabase gen types typescript --project-id ayvieorwnyxxfygbhzny > src/types/database.types.ts"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
@@ -36,6 +39,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "vitest": "^2.0.0",
     "@types/leaflet": "^1.9.8",
     "@types/leaflet-draw": "^1.0.11",
     "@types/node": "^20",

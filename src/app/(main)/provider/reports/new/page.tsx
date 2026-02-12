@@ -49,7 +49,7 @@ export default function ProviderReportsNewPage() {
       setUser(u as { id: string });
 
       const { data: projects } = await supabase
-        .from('projects')
+        .from('campaigns')
         .select('id')
         .eq('provider_id', u.id);
       const projectIds = (projects || []).map((p) => p.id);
@@ -72,10 +72,10 @@ export default function ProviderReportsNewPage() {
       }
       const list = (pendingBookings || []) as Booking[];
       if (list.length > 0) {
-        const { data: projs } = await supabase.from('projects').select('id, campaign_title, location, final_unit_price, base_price').in('id', [...new Set(list.map((b) => b.campaign_id))]);
+        const { data: projs } = await supabase.from('campaigns').select('id, campaign_title, location, final_unit_price, base_price').in('id', [...new Set(list.map((b) => b.campaign_id))]);
         const projMap = new Map((projs || []).map((p) => [p.id, p]));
         list.forEach((b) => {
-          (b as Booking & { projects?: Project }).projects = projMap.get(b.campaign_id);
+          (b as Booking & { projects?: Project }).projects = projMap.get(b.campaign_id) as Project | undefined;
         });
       }
       setBookings(list);

@@ -93,20 +93,20 @@ export async function fetchBookingsByFarmer(
 
   const campaignIds = [...new Set(list.map((b) => b.campaign_id))];
   const { data: projects } = await supabase
-    .from('projects')
+    .from('campaigns')
     .select('id, location, campaign_title, start_date, end_date, status, is_closed')
     .in('id', campaignIds);
 
   const projectMap = new Map<string, FarmerBookingItem['project']>();
-  (projects ?? []).forEach((p: Record<string, unknown>) => {
-    projectMap.set(p.id as string, {
-      id: p.id as string,
-      location: (p.location as string) ?? '',
-      campaign_title: p.campaign_title as string | undefined,
-      start_date: p.start_date as string | undefined,
-      end_date: p.end_date as string | undefined,
-      status: p.status as string | undefined,
-      is_closed: p.is_closed as boolean | undefined,
+  (projects ?? []).forEach((p) => {
+    projectMap.set(p.id, {
+      id: p.id,
+      location: p.location ?? '',
+      campaign_title: p.campaign_title,
+      start_date: p.start_date,
+      end_date: p.end_date,
+      status: p.status,
+      is_closed: p.is_closed,
     });
   });
 
@@ -132,7 +132,7 @@ export async function createBooking(
 ): Promise<BookingCreateResult> {
   try {
     const { data: project, error: projectError } = await supabase
-      .from('projects')
+      .from('campaigns')
       .select('id, is_closed, status, end_date, max_target_area_10r, target_area_10r')
       .eq('id', input.campaign_id)
       .single();

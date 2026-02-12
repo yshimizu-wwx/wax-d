@@ -66,7 +66,7 @@ export default function AdminDashboardPage() {
         .eq('status', 'pending')
         .then(({ count }) => setPendingCount(count ?? 0));
       supabase
-        .from('projects')
+        .from('campaigns')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'open')
         .then(({ count }) => setOpenCampaignsCount(count ?? 0));
@@ -74,7 +74,7 @@ export default function AdminDashboardPage() {
 
     if (user.role === 'provider') {
       supabase
-        .from('projects')
+        .from('campaigns')
         .select('id, campaign_title, location, final_date, status, is_closed, base_price, min_price, target_area_10r, min_target_area_10r, max_target_area_10r, execution_price')
         .eq('provider_id', user.id)
         .in('status', ['open', 'closed', 'applied'])
@@ -116,7 +116,7 @@ export default function AdminDashboardPage() {
             setUpcomingWork(list.slice(0, 5));
 
             const totalArea10r = (totals as number[]).reduce((a, b) => a + b, 0);
-            const openProj = projs.find((p: { is_closed?: boolean; status?: string }) => !p.is_closed && (p.status === 'open' || p.status === 'applied'));
+            const openProj = projs.find((p) => !p.is_closed && (p.status === 'open' || p.status === 'applied'));
             let currentUnitPrice: number | null = null;
             if (openProj && openProj.id) {
               const idx = ids.indexOf(openProj.id);

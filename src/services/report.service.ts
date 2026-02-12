@@ -60,7 +60,7 @@ export async function submitWorkReport(
     }
 
     const { data: project, error: projectError } = await supabase
-      .from('projects')
+      .from('campaigns')
       .select('id, provider_id, final_unit_price, base_price, dilution_rate, amount_per_10r')
       .eq('id', booking.campaign_id)
       .single();

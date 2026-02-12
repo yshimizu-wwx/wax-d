@@ -1,3 +1,5 @@
+import type { Database as GeneratedDatabase } from './database.types';
+
 /** User status (schema constraint) */
 export type UserStatus = 'pending' | 'active' | 'under_review' | 'suspended' | 'rejected';
 
@@ -24,46 +26,11 @@ export interface UserRow {
 /** PostGIS geometry: stored/retrieved as WKT or GeoJSON depending on driver */
 export type GeometryColumn = unknown;
 
-export interface Project {
-    id: string;
-    provider_id?: string | null;
-    start_date?: string | null;
-    end_date?: string | null;
-    final_date?: string | null;
-    location: string;
-    base_price?: number | null;
-    min_price?: number | null;
-    target_area_10r?: number | null;
-    status?: string | null;
-    map_url?: string | null;
-    target_crop_id?: string | null;
-    task_category_id?: string | null;
-    task_detail_id?: string | null;
-    is_closed?: boolean | null;
-    final_unit_price?: number | null;
-    pesticide?: string | null;
-    notes?: string | null;
-    billing_id?: string | null;
-    final_decision_date?: string | null;
-    min_target_area_10r?: number | null;
-    max_target_area_10r?: number | null;
-    execution_price?: number | null;
-    pesticide_name?: string | null;
-    dilution_rate?: number | null;
-    amount_per_10r?: number | null;
-    target_area_polygon?: GeometryColumn;
-    confirmation_deadline_days?: number | null;
-    campaign_title?: string | null;
-    crop_name?: string | null;
-    task_category_name?: string | null;
-    task_detail_name?: string | null;
-    created_at?: string | null;
-
-    /** Frontend helper: display title */
+/** Campaign row from public.campaigns (DB table name: campaigns). Frontend helpers: title, current_price. */
+export type Project = GeneratedDatabase['public']['Tables']['campaigns']['Row'] & {
     title?: string;
-    /** Frontend helper: current unit price */
     current_price?: number;
-}
+};
 
 /** Booking row from public.bookings (schema-aligned) */
 export interface BookingRow {
@@ -181,3 +148,6 @@ export interface Field {
     area_coordinates?: GeometryColumn;
     created_at?: string | null;
 }
+
+/** Re-export generated Database for typed Supabase client (use .from('campaigns'), .from('bookings'), etc.). */
+export type { Database } from './database.types';

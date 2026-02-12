@@ -84,7 +84,7 @@ export default function AdminUsersPage() {
         farmer_id: l.farmer_id,
         name: u?.name ?? '—',
         email: u?.email ?? '—',
-        created_at: l.created_at,
+        created_at: l.created_at ?? '',
       };
     });
     setLinkedFarmers(list);
