@@ -34,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {showDashboardLayout && user && <AppSidebar user={user} />}
         <main
           className={cn(
-            "flex-1 w-full min-h-[calc(100vh-4rem)] overflow-auto",
+            "relative z-0 flex-1 w-full min-h-[calc(100vh-4rem)] overflow-auto",
             showDashboardLayout && "pb-20 md:pb-0 md:px-6 md:py-6"
           )}
         >

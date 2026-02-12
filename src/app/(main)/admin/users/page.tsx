@@ -102,38 +102,6 @@ export default function AdminUsersPage() {
     }
   }, [user]);
 
-  const updateUserStatus = async (userId: string, status: 'active' | 'rejected') => {
-    setActingId(userId);
-    const { error } = await supabase.from('users').update({ status }).eq('id', userId);
-    setActingId(null);
-    if (error) {
-      toast.error(error.message || '更新に失敗しました');
-      return;
-    }
-    toast.success(status === 'active' ? '承認しました' : '却下しました');
-    loadPending();
-  };
-
-  if (loading) {
-    return (
-      <main className="min-h-full">
-        <AppLoader message="読み込み中..." />
-      </main>
-    );
-  }
-
-  if (!user || (user.role !== 'admin' && user.role !== 'provider')) {
-    return (
-      <main className="min-h-full flex items-center justify-center p-4">
-        <Card>
-          <CardContent className="p-8 text-center text-dashboard-muted">
-            この画面を利用する権限がありません。
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
-
   const pendingColumns = useMemo<ColumnDef<PendingUser>[]>(
     () => [
       { id: 'name', header: '名前', accessorFn: (r) => r.name ?? '—', enableSorting: true },
@@ -188,6 +156,38 @@ export default function AdminUsersPage() {
     ],
     []
   );
+
+  const updateUserStatus = async (userId: string, status: 'active' | 'rejected') => {
+    setActingId(userId);
+    const { error } = await supabase.from('users').update({ status }).eq('id', userId);
+    setActingId(null);
+    if (error) {
+      toast.error(error.message || '更新に失敗しました');
+      return;
+    }
+    toast.success(status === 'active' ? '承認しました' : '却下しました');
+    loadPending();
+  };
+
+  if (loading) {
+    return (
+      <main className="min-h-full">
+        <AppLoader message="読み込み中..." />
+      </main>
+    );
+  }
+
+  if (!user || (user.role !== 'admin' && user.role !== 'provider')) {
+    return (
+      <main className="min-h-full flex items-center justify-center p-4">
+        <Card>
+          <CardContent className="p-8 text-center text-dashboard-muted">
+            この画面を利用する権限がありません。
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-full">

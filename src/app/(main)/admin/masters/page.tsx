@@ -64,6 +64,15 @@ export default function MastersPage() {
     if (user) load();
   }, [user, activeTab]);
 
+  const formatMasterError = (error?: string) => {
+    if (!error) return '操作に失敗しました';
+    const lower = error.toLowerCase();
+    if (lower.includes('permission') || lower.includes('denied') || lower.includes('pgrst301')) {
+      return 'データの保存に必要な権限がありません。管理者にご連絡ください。';
+    }
+    return error;
+  };
+
   const handleAdd = async () => {
     const name = newName.trim();
     if (!name) {
@@ -80,7 +89,7 @@ export default function MastersPage() {
       setShowAdd(false);
       load();
     } else {
-      toast.error(res.error || '追加に失敗しました');
+      toast.error(formatMasterError(res.error) || '追加に失敗しました');
     }
   };
 
@@ -104,7 +113,7 @@ export default function MastersPage() {
       setEditingId(null);
       load();
     } else {
-      toast.error(res.error || '更新に失敗しました');
+      toast.error(formatMasterError(res.error) || '更新に失敗しました');
     }
   };
 
@@ -119,7 +128,7 @@ export default function MastersPage() {
       toast.success(m.status === 'active' ? '無効にしました' : '有効にしました');
       load();
     } else {
-      toast.error(res.error || '操作に失敗しました');
+      toast.error(formatMasterError(res.error) || '操作に失敗しました');
     }
   };
 
@@ -213,7 +222,7 @@ export default function MastersPage() {
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       placeholder="名称を入力"
-                      className="flex-1 px-4 py-2 rounded-lg border border-dashboard-border focus:ring-2 focus:ring-agrix-forest"
+                      className="flex-1 px-4 py-2 rounded-lg border border-dashboard-border bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted focus:ring-2 focus:ring-agrix-forest focus:outline-none"
                     />
                     <button
                       type="button"
@@ -253,7 +262,8 @@ export default function MastersPage() {
                               type="text"
                               value={editName}
                               onChange={(e) => setEditName(e.target.value)}
-                              className="flex-1 px-3 py-2 rounded-lg border border-dashboard-border focus:ring-2 focus:ring-agrix-forest"
+                              placeholder="名称"
+                              className="flex-1 px-3 py-2 rounded-lg border border-dashboard-border bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted focus:ring-2 focus:ring-agrix-forest focus:outline-none"
                             />
                             <button
                               type="button"

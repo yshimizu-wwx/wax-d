@@ -126,7 +126,7 @@ export default function CampaignCreatePage() {
     return (
         <main className="min-h-full">
             {/* Header */}
-            <header className="bg-dashboard-card border-b border-dashboard-border sticky top-0 z-50 shadow-sm">
+            <header className="bg-dashboard-card border-b border-dashboard-border sticky top-0 z-[1000] shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
                         <div>

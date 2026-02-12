@@ -14,6 +14,7 @@ import {
   Building2,
   UserCheck,
   Send,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { User } from "@/lib/auth";
@@ -29,6 +30,7 @@ function getNavItems(role: string): NavItem[] {
     { href: role === "admin" || role === "provider" ? "/admin" : "/", label: "ダッシュボード", icon: LayoutDashboard },
   ];
   if (role === "farmer") {
+    items.push({ href: "/case-map", label: "地図で探す", icon: MapPin });
     items.push({ href: "/requests", label: "作業依頼", icon: Send });
     items.push({ href: "/#applications", label: "申込履歴", icon: FileText });
     items.push({ href: "/my-fields", label: "My畑", icon: Sprout });
