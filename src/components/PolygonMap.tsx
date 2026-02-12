@@ -40,10 +40,10 @@ function MapController({ onPolygonComplete, initialPolygon }: PolygonMapProps) {
         // Add initial polygon if provided
         if (initialPolygon && initialPolygon.length > 2) {
             const polygon = L.polygon(initialPolygon, {
-                color: '#10b981', // Tailwind green-500 equivalent
-                fillColor: '#10b981',
-                fillOpacity: 0.2,
-                weight: 2
+                color: '#1A4731',
+                fillColor: '#1A4731',
+                fillOpacity: 0.25,
+                weight: 3
             });
             drawnItems.addLayer(polygon);
             map.fitBounds(polygon.getBounds());
@@ -56,10 +56,10 @@ function MapController({ onPolygonComplete, initialPolygon }: PolygonMapProps) {
                     allowIntersection: false,
                     showArea: true,
                     shapeOptions: {
-                        color: '#10b981',
-                        fillColor: '#10b981',
-                        fillOpacity: 0.2,
-                        weight: 2
+                        color: '#1A4731',
+                        fillColor: '#1A4731',
+                        fillOpacity: 0.25,
+                        weight: 3
                     }
                 },
                 rectangle: false,

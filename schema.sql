@@ -228,3 +228,10 @@ create index idx_fields_farmer_id on fields(farmer_id);
 -- Spatial indexes
 create index idx_projects_polygon on projects using gist(target_area_polygon);
 create index idx_fields_polygon on fields using gist(area_coordinates);
+
+-- RLS for public.users (login/signup で「permission denied」を防ぐ)
+grant select, insert, update on public.users to authenticated;
+alter table public.users enable row level security;
+create policy "users_select_own" on public.users for select to authenticated using ( (auth.jwt() ->> 'email') = email );
+create policy "users_insert_own" on public.users for insert to authenticated with check ( (auth.jwt() ->> 'email') = email );
+create policy "users_update_own" on public.users for update to authenticated using ( (auth.jwt() ->> 'email') = email ) with check ( (auth.jwt() ->> 'email') = email );

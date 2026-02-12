@@ -254,7 +254,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
 
                 <div className="text-center">
                     <div className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">現在の単価</div>
-                    <div className="text-4xl font-black text-green-400 flex justify-center items-baseline gap-1">
+                    <div key={currentPrice} className="text-4xl font-black text-agrix-gold flex justify-center items-baseline gap-1 animate-price-pulse">
                         <span className="text-2xl">¥</span>
                         {currentPrice?.toLocaleString()}
                         <span className="text-sm font-normal text-slate-400 ml-1">/ 10a</span>

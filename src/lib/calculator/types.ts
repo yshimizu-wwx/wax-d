@@ -84,3 +84,27 @@ export interface ApplicationAreaValidation {
   /** 満額ライン面積（10R単位） */
   maxArea: number;
 }
+
+/**
+ * 案件価格計算の集約結果（単価＋金額見積）
+ */
+export interface CampaignCalculationResult {
+  /** 現在単価（円/10R）- 不成立時はnull */
+  currentPrice: number | null;
+  /** 進捗率（0〜1） */
+  progress: number;
+  /** 不成立フラグ */
+  isUnformed: boolean;
+  /** 満額ラインまでの残り面積（10R単位） */
+  remainingArea: number;
+  /** 値引き額（円）- 開始単価からの減額 */
+  priceReduction: number;
+  /** 税抜見積金額（円）- appliedArea10r 指定時のみ */
+  amountExTax?: number;
+  /** 消費税額（円） */
+  taxAmount?: number;
+  /** 税込見積金額（円） */
+  amountInclusive?: number;
+  /** 消費税率（%） */
+  taxRate?: number;
+}

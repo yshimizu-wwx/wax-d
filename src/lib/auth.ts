@@ -7,6 +7,7 @@ export interface User {
     name: string;
     phone: string;
     status: string;
+    address?: string;
     associated_provider_id?: string;
     invitation_code?: string;
 }
@@ -90,6 +91,53 @@ export async function linkFarmerToProvider(farmerId: string, providerId: string)
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update current user profile (name, phone, address) in public.users
+ */
+export async function updateUserProfile(updates: {
+    name?: string;
+    phone?: string;
+    address?: string;
+}): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.email) {
+            return { success: false, error: 'ログインしていません' };
+        }
+        const { error } = await supabase
+            .from('users')
+            .update({
+                ...(updates.name !== undefined && { name: updates.name }),
+                ...(updates.phone !== undefined && { phone: updates.phone }),
+                ...(updates.address !== undefined && { address: updates.address }),
+            })
+            .eq('email', session.user.email);
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        return { success: true };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        return { success: false, error: msg };
+    }
+}
+
+/**
+ * Update password via Supabase Auth
+ */
+export async function updatePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        return { success: true };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        return { success: false, error: msg };
     }
 }
 

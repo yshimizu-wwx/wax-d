@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { Project } from '@/types/database'
+import { Project, type WorkRequest, type Field } from '@/types/database'
 import type { Polygon } from 'geojson'
 import { geoJSONToWKT } from '@/lib/geo/areaCalculator'
 import { validateApplicationArea, calculateCurrentUnitPrice } from '@/lib/calculator/priceCalculator'
@@ -417,5 +417,145 @@ export async function setCampaignCompleted(campaignId: string): Promise<{ succes
         .update({ status: 'completed' })
         .eq('id', campaignId)
     if (error) return { success: false, error: error.message }
+    return { success: true }
+}
+
+// --- 作業依頼（work_requests） ---
+
+export interface WorkRequestData {
+    farmer_id: string
+    location?: string
+    crop_name_free_text?: string
+    task_category_free_text?: string
+    task_detail_free_text?: string
+    desired_start_date?: string
+    desired_end_date?: string
+    estimated_area_10r?: number
+    desired_price?: number
+    notes?: string
+    /** 対象畑ID（任意） */
+    field_id?: string | null
+}
+
+export async function createWorkRequest(data: WorkRequestData): Promise<{ success: boolean; error?: string; requestId?: string }> {
+    try {
+        const id = `WR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const { data: row, error } = await supabase
+            .from('work_requests')
+            .insert({
+                id,
+                farmer_id: data.farmer_id,
+                location: data.location || null,
+                crop_name_free_text: data.crop_name_free_text || null,
+                task_category_free_text: data.task_category_free_text || null,
+                task_detail_free_text: data.task_detail_free_text || null,
+                desired_start_date: data.desired_start_date || null,
+                desired_end_date: data.desired_end_date || null,
+                estimated_area_10r: data.estimated_area_10r ?? null,
+                desired_price: data.desired_price ?? null,
+                notes: data.notes || null,
+                status: 'pending',
+            })
+            .select('id')
+            .single()
+        if (error) {
+            console.error('Error creating work request:', error)
+            return { success: false, error: error.message }
+        }
+        return { success: true, requestId: row?.id ?? id }
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error'
+        return { success: false, error: msg }
+    }
+}
+
+export async function fetchWorkRequestsByFarmer(farmerId: string): Promise<WorkRequest[]> {
+    const { data, error } = await supabase
+        .from('work_requests')
+        .select('*')
+        .eq('farmer_id', farmerId)
+        .order('created_at', { ascending: false })
+    if (error) {
+        console.error('Error fetching work requests:', error)
+        return []
+    }
+    return (data as WorkRequest[]) || []
+}
+
+// --- 畑（fields）CRUD ---
+
+export async function fetchFieldsByFarmer(farmerId: string): Promise<Field[]> {
+    const { data, error } = await supabase
+        .from('fields')
+        .select('*')
+        .eq('farmer_id', farmerId)
+        .order('created_at', { ascending: false })
+    if (error) {
+        console.error('Error fetching fields:', error)
+        return []
+    }
+    return (data as Field[]) || []
+}
+
+export interface FieldData {
+    farmer_id: string
+    name?: string
+    address?: string
+    area_size?: number
+    lat?: number
+    lng?: number
+}
+
+export async function createField(data: FieldData): Promise<{ success: boolean; error?: string; fieldId?: string }> {
+    try {
+        const id = `F_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const { data: row, error } = await supabase
+            .from('fields')
+            .insert({
+                id,
+                farmer_id: data.farmer_id,
+                name: data.name || null,
+                address: data.address || null,
+                area_size: data.area_size ?? null,
+                lat: data.lat ?? null,
+                lng: data.lng ?? null,
+            })
+            .select('id')
+            .single()
+        if (error) {
+            console.error('Error creating field:', error)
+            return { success: false, error: error.message }
+        }
+        return { success: true, fieldId: row?.id ?? id }
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error'
+        return { success: false, error: msg }
+    }
+}
+
+export async function updateField(
+    fieldId: string,
+    data: Partial<Omit<FieldData, 'farmer_id'>>
+): Promise<{ success: boolean; error?: string }> {
+    const payload: Record<string, unknown> = {}
+    if (data.name !== undefined) payload.name = data.name
+    if (data.address !== undefined) payload.address = data.address
+    if (data.area_size !== undefined) payload.area_size = data.area_size
+    if (data.lat !== undefined) payload.lat = data.lat
+    if (data.lng !== undefined) payload.lng = data.lng
+    const { error } = await supabase.from('fields').update(payload).eq('id', fieldId)
+    if (error) {
+        console.error('Error updating field:', error)
+        return { success: false, error: error.message }
+    }
+    return { success: true }
+}
+
+export async function deleteField(fieldId: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.from('fields').delete().eq('id', fieldId)
+    if (error) {
+        console.error('Error deleting field:', error)
+        return { success: false, error: error.message }
+    }
     return { success: true }
 }

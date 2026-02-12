@@ -1,0 +1,288 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Sprout, Plus, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { getCurrentUser, type User } from '@/lib/auth';
+import {
+  fetchFieldsByFarmer,
+  createField,
+  updateField,
+  deleteField,
+  type FieldData,
+} from '@/lib/api';
+import type { Field } from '@/types/database';
+import AppLoader from '@/components/AppLoader';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+
+export default function MyFieldsPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fields, setFields] = useState<Field[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formName, setFormName] = useState('');
+  const [formAddress, setFormAddress] = useState('');
+  const [formAreaSize, setFormAreaSize] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      setUser(u ?? null);
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user || user.role !== 'farmer') return;
+    fetchFieldsByFarmer(user.id).then(setFields);
+  }, [user]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    if (user.role !== 'farmer') {
+      router.replace('/');
+    }
+  }, [user, loading, router]);
+
+  const openAdd = () => {
+    setEditingId(null);
+    setFormName('');
+    setFormAddress('');
+    setFormAreaSize('');
+    setShowForm(true);
+  };
+
+  const openEdit = (f: Field) => {
+    setEditingId(f.id);
+    setFormName(f.name || '');
+    setFormAddress(f.address || '');
+    setFormAreaSize(f.area_size != null ? String(f.area_size) : '');
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || user.role !== 'farmer') return;
+    setSubmitting(true);
+    try {
+      if (editingId) {
+        const result = await updateField(editingId, {
+          name: formName || undefined,
+          address: formAddress || undefined,
+          area_size: formAreaSize ? Number(formAreaSize) : undefined,
+        });
+        if (result.success) {
+          toast.success('畑を更新しました');
+          fetchFieldsByFarmer(user.id).then(setFields);
+          closeForm();
+        } else {
+          toast.error(result.error);
+        }
+      } else {
+        const data: FieldData = {
+          farmer_id: user.id,
+          name: formName || undefined,
+          address: formAddress || undefined,
+          area_size: formAreaSize ? Number(formAreaSize) : undefined,
+        };
+        const result = await createField(data);
+        if (result.success) {
+          toast.success('畑を登録しました');
+          fetchFieldsByFarmer(user.id).then(setFields);
+          closeForm();
+        } else {
+          toast.error(result.error);
+        }
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (fieldId: string) => {
+    const result = await deleteField(fieldId);
+    if (result.success) {
+      toast.success('畑を削除しました');
+      setFields((prev) => prev.filter((f) => f.id !== fieldId));
+      setDeleteConfirmId(null);
+    } else {
+      toast.error(result.error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <main className="min-h-full flex items-center justify-center">
+        <AppLoader message="読み込み中..." />
+      </main>
+    );
+  }
+
+  if (!user || user.role !== 'farmer') {
+    return (
+      <main className="min-h-full flex items-center justify-center">
+        <AppLoader message="リダイレクト中..." />
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-full">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <h1 className="text-xl font-bold text-dashboard-text mb-2 flex items-center gap-2">
+          <Sprout className="w-6 h-6 text-agrix-forest" />
+          マイ畑管理
+        </h1>
+        <p className="text-sm text-dashboard-muted mb-6">
+          登録した畑は、作業依頼や案件申込時に選択できます。
+        </p>
+
+        <div className="mb-6">
+          <Button onClick={openAdd} className="bg-agrix-forest hover:bg-agrix-forest-dark">
+            <Plus className="w-4 h-4 mr-2" />
+            畑を登録
+          </Button>
+        </div>
+
+        <Card className="overflow-hidden">
+          {fields.length === 0 ? (
+            <CardContent className="p-10 flex flex-col items-center justify-center text-center">
+              <div className="rounded-full bg-agrix-forest/10 p-6 mb-4">
+                <Sprout className="w-12 h-12 text-agrix-forest" />
+              </div>
+              <p className="font-bold text-dashboard-text mb-1">登録された畑はありません</p>
+              <p className="text-sm text-dashboard-muted mb-4">「畑を登録」から追加してください。</p>
+              <Button onClick={openAdd} variant="outline">
+                <Plus className="w-4 h-4 mr-2" />
+                畑を登録
+              </Button>
+            </CardContent>
+          ) : (
+            <ul className="divide-y divide-dashboard-border">
+              {fields.map((f) => (
+                <li key={f.id} className="p-4 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-dashboard-text">{f.name || '（名称未設定）'}</p>
+                    <p className="text-sm text-dashboard-muted">
+                      {f.address && `${f.address} · `}
+                      {f.area_size != null && `${f.area_size} 反`}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(f)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={() => setDeleteConfirmId(f.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Dialog open={showForm} onOpenChange={(open) => !open && closeForm()}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingId ? '畑を編集' : '畑を登録'}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="fieldName">名称</Label>
+                <Input
+                  id="fieldName"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="例: 北側水田"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fieldAddress">住所・場所</Label>
+                <Input
+                  id="fieldAddress"
+                  value={formAddress}
+                  onChange={(e) => setFormAddress(e.target.value)}
+                  placeholder="例: 〇〇県〇〇市..."
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fieldArea">面積（反）</Label>
+                <Input
+                  id="fieldArea"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={formAreaSize}
+                  onChange={(e) => setFormAreaSize(e.target.value)}
+                  placeholder="例: 5.5"
+                  className="mt-1"
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeForm}>
+                  キャンセル
+                </Button>
+                <Button type="submit" disabled={submitting} className="bg-agrix-forest hover:bg-agrix-forest-dark">
+                  {submitting ? '保存中...' : editingId ? '更新' : '登録'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>畑を削除しますか？</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-dashboard-muted">この操作は取り消せません。</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+                キャンセル
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700"
+                onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+              >
+                削除
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </main>
+  );
+}

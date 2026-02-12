@@ -1,5 +1,5 @@
 {
   "headers": {
-    "x-next-cache-tags": "_N_T_/layout,_N_T_/provider/layout,_N_T_/provider/calendar/layout,_N_T_/provider/calendar/page,_N_T_/provider/calendar"
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(main)/layout,_N_T_/(main)/provider/layout,_N_T_/(main)/provider/calendar/layout,_N_T_/(main)/provider/calendar/page,_N_T_/provider/calendar"
   }
 }

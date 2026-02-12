@@ -63,3 +63,41 @@ export interface Master {
     status: 'active' | 'inactive';
     created_at?: string;
 }
+
+/** 作業依頼（農家→業者）。案件化前の依頼データ */
+export interface WorkRequest {
+    id: string;
+    farmer_id: string;
+    provider_id?: string | null;
+    requested_at?: string;
+    location?: string | null;
+    crop_name?: string | null;
+    task_category_name?: string | null;
+    task_detail_name?: string | null;
+    desired_start_date?: string | null;
+    desired_end_date?: string | null;
+    estimated_area_10r?: number | null;
+    notes?: string | null;
+    status: 'pending' | 'converted' | 'rejected';
+    converted_campaign_id?: string | null;
+    crop_name_free_text?: string | null;
+    task_category_free_text?: string | null;
+    task_detail_free_text?: string | null;
+    desired_price?: number | null;
+    target_area_polygon?: string | null;
+    created_at?: string;
+}
+
+/** 畑（圃場） */
+export interface Field {
+    id: string;
+    farmer_id: string;
+    name?: string | null;
+    address?: string | null;
+    map_url?: string | null;
+    area_size?: number | null;
+    lat?: number | null;
+    lng?: number | null;
+    place_id?: string | null;
+    created_at?: string;
+}

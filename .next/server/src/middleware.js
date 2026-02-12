@@ -17535,7 +17535,7 @@ async function middleware(req) {
             headers: req.headers
         }
     });
-    const supabase = createServerClient("https://ayvieorwnyxxfygbhzny.supabase.co", "sb_publishable_saY21TLJVLBNk5lg53j5Pg_PW9RAlEr", {
+    const supabase = createServerClient("https://ayvieorwnyxxfygbhzny.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5dmllb3J3bnl4eGZ5Z2Joem55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MjY1OTUsImV4cCI6MjA4NjQwMjU5NX0.-alPp1Cr1J2yoKcdaln4LMbOPjaGCb4wRjURGhibLPk", {
         cookies: {
             get (name) {
                 return req.cookies.get(name)?.value;

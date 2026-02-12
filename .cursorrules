@@ -1,0 +1,49 @@
+# v3-app プロジェクトルール
+
+## ディレクトリ構造
+
+- **App Router**: `src/app/` のみ。ルートグループ `(auth)` / `(main)` でレイアウトを分離。
+- **ページ**: `(main)/page.tsx`（農家トップ）、`(main)/admin/*`、`(main)/provider/*`、`(auth)/login`、`(auth)/auth/*`。feature 別は URL 階層（例: `admin/campaigns/new`）で表現し、`page.tsx` は各セグメントに1つ。
+- **API**: `src/app/api/` の Route Handler のみ。例: `api/provider/reports/submit/route.ts`。
+- **コンポーネント**: 共通は `src/components/` にフラット配置。shadcn 系のプリミティブは `src/components/ui/`（button, card, dialog, input, progress, skeleton, data-table）。
+- **ロジック・データ**: `src/lib/`。API 呼び出し・Supabase は `api.ts`、認証は `auth.ts`、マスタは `masters.ts`。ドメイン別はサブディレクトリ（`lib/calculator/`、`lib/geo/`）。
+- **型**: DB/アプリ共通は `src/types/database.ts`。ドメイン型は `lib/<domain>/types.ts`（例: `lib/calculator/types.ts`）。宣言のみは `types/*.d.ts`（leaflet-images, turf）。
+- **エントリ**: `src/middleware.ts` はルート直下。`tsconfig` の `include` は `src/**/*` と `.next/types/**/*`。
+
+## 技術スタック（package.json / tsconfig）
+
+- **Runtime**: Node (Next.js 14), React 18。
+- **パス**: `baseUrl: "."`, `paths: { "@/*": ["./src/*"] }`。import は必ず `@/` で統一。
+- **Supabase**: ORM なし。`@supabase/ssr` + `@supabase/supabase-js` で直接クライアント利用。
+  - ブラウザ: `@/lib/supabase` の `createBrowserClient` インスタンス。
+  - サーバー（Route Handler / Server Components）: `@/lib/supabase/server` の `createClient()` を await して利用。
+  - middleware: `createServerClient` を `@supabase/ssr` から直接使い、cookies を自前で get/set/remove。
+- **UI**: Tailwind, `class-variance-authority` (cva), `clsx` + `tailwind-merge`。`cn()` は `@/lib/utils` から提供。Radix (dialog, progress, slot), Lucide, Sonner。
+- **地図・Geo**: Leaflet + react-leaflet, leaflet-draw, @turf/turf。型は `@/types/leaflet-images.d.ts`, `@/types/turf.d.ts`。
+- **その他**: FullCalendar (core, daygrid, list, timegrid, react), TanStack React Table, テストは `*.test.ts`（例: `lib/calculator/priceCalculator.test.ts`, `lib/geo/areaCalculator.test.ts`）。
+
+## パターン
+
+### 共有コンポーネント・ユーティリティ
+
+- コンポーネントは `@/components/` または `@/components/ui/` から import。レイアウトは `AppLayout`, `AppSidebar`, `BottomNav`, `Header`, `UserMenu`。
+- スタイル用ユーティリティは `cn` のみ `@/lib/utils` から。他は `@/lib/calculator/priceCalculator` や `@/lib/geo/areaCalculator` などドメイン別。
+- データ取得は `@/lib/api`（fetchProjects, fetchActiveProject, getCurrentUser 等）と `@/lib/masters`（fetchMasters, createMaster 等）。Repository という名前のモジュールは使わない。
+
+### 型
+
+- **DB・アプリ共通**: `src/types/database.ts` に `Project`, `Booking`, `Master` は `interface`、`MasterType` は `type`（union）。
+- **ドメイン**: `lib/calculator/types.ts` は `interface` のみ（CampaignPricing, PriceCalculationResult 等）。`lib/auth.ts` の `User` は `interface`。
+- **コンポーネント・API 固有**: そのファイル内で `interface` を export（例: `CampaignForm` の `FarmerFormData`, `api.ts` の `FarmerBookingItem`, `BookingData`, `CampaignCreateData`, `ui/button` の `ButtonProps`）。`type` は union/alias 用（例: `MasterType`）。
+- 他モジュールの型は `type X` で import するスタイル（例: `import type { User } from '@/lib/auth'`）。
+
+### 名前付け
+
+- カスタムフックの `use*` は現状未使用（React/Next の useState, useRouter, usePathname 等のみ）。
+- データ層は `fetch*`, `create*`, `update*` 等の関数名。`*Repository` は使わない。
+- ページは `page.tsx`、API は `route.ts`。レイアウトは `layout.tsx`。
+
+### API・Supabase 利用
+
+- Route Handler では `const supabase = await createClient()`（`@/lib/supabase/server`）。認証は `supabase.auth.getSession()`、テーブルは `.from('table').select/insert/update`。エラーは `NextResponse.json(..., { status })` で返す。
+- クライアント側の fetch は `lib/api.ts` の関数経由で、その中で `@/lib/supabase` のブラウザクライアントを使用。
