@@ -153,23 +153,22 @@ export interface CampaignCreateData {
 }
 
 /**
- * Create a new campaign (provider-facing)
+ * Create a new campaign (provider-facing).
+ * providerId should be the current user's id when role is provider.
  */
-export async function createCampaign(campaignData: CampaignCreateData): Promise<{ success: boolean; error?: string; campaignId?: string }> {
+export async function createCampaign(
+    campaignData: CampaignCreateData,
+    providerId?: string
+): Promise<{ success: boolean; error?: string; campaignId?: string }> {
     try {
-        // Convert GeoJSON polygon to WKT for PostGIS
         const polygonWKT = geoJSONToWKT(campaignData.targetAreaPolygon)
-
-        // Generate a unique campaign ID
         const campaignId = `C_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-        // Map form data to database schema
         const { data, error } = await supabase
             .from('projects')
             .insert({
                 id: campaignId,
-                // TODO: Get provider_id from session/auth
-                provider_id: 'P001', // Hardcoded for now
+                provider_id: providerId || null,
 
                 // Location & Schedule
                 location: campaignData.location,
@@ -223,4 +222,24 @@ export async function createCampaign(campaignData: CampaignCreateData): Promise<
             error: error instanceof Error ? error.message : 'Unknown error occurred'
         }
     }
+}
+
+/** Campaign status flow: open -> applied (optional) -> closed -> completed */
+
+export async function closeCampaign(campaignId: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase
+        .from('projects')
+        .update({ status: 'closed', is_closed: true })
+        .eq('id', campaignId)
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+}
+
+export async function setCampaignCompleted(campaignId: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase
+        .from('projects')
+        .update({ status: 'completed' })
+        .eq('id', campaignId)
+    if (error) return { success: false, error: error.message }
+    return { success: true }
 }

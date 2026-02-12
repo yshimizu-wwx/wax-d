@@ -94,11 +94,72 @@ create table bookings (
   created_at timestamp with time zone default now()
 );
 
+-- Masters (GAS masters sheet: crop, task_category, task_detail, pesticide)
+create table masters (
+  id text primary key,
+  provider_id text references users(id),
+  type text check (type in ('crop', 'task_category', 'task_detail', 'pesticide')),
+  name text not null,
+  parent_id text,
+  status text check (status in ('active', 'inactive')) default 'active',
+  created_at timestamp with time zone default now()
+);
+create index idx_masters_provider on masters(provider_id);
+create index idx_masters_type on masters(type);
+create index idx_masters_status on masters(status);
+
+-- Farmer-Provider link table (for invitation / association)
+create table farmer_providers (
+  farmer_id text references users(id),
+  provider_id text references users(id),
+  status text check (status in ('active', 'inactive')) default 'active',
+  created_at timestamp with time zone default now(),
+  primary key (farmer_id, provider_id)
+);
+create index idx_farmer_providers_farmer on farmer_providers(farmer_id);
+create index idx_farmer_providers_provider on farmer_providers(provider_id);
+
+-- 5. work_reports (作業実績報告) - WorkReport.js
+create table work_reports (
+  id text primary key,
+  application_id text references bookings(id),
+  campaign_id text references projects(id),
+  dilution_rate_actual text,
+  amount_actual_per_10r text,
+  photo_urls_json text,
+  reported_at timestamp with time zone default now(),
+  reporter_id text references users(id),
+  gps_lat double precision,
+  gps_lng double precision,
+  reported_at_iso text,
+  campaign_snapshot_json text,
+  application_snapshot_json text
+);
+create index idx_work_reports_campaign on work_reports(campaign_id);
+create index idx_work_reports_application on work_reports(application_id);
+
+-- 6. routes (作業ルート最適化) - Application.js optimizeRouteForCampaign
+create table routes (
+  id text primary key,
+  campaign_id text references projects(id),
+  provider_id text references users(id),
+  work_date date,
+  route_order integer,
+  application_id text references bookings(id),
+  field_id text references fields(id),
+  estimated_arrival_time text,
+  estimated_work_duration integer,
+  estimated_departure_time text,
+  created_at timestamp with time zone default now()
+);
+create index idx_routes_campaign_date on routes(campaign_id, work_date);
+
 -- Indexes for performance
 create index idx_projects_provider_id on projects(provider_id);
 create index idx_projects_status on projects(status);
 create index idx_bookings_campaign_id on bookings(campaign_id);
 create index idx_bookings_farmer_id on bookings(farmer_id);
+create index idx_bookings_work_status on bookings(work_status);
 create index idx_fields_farmer_id on fields(farmer_id);
 
 -- Spatial indexes

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { Loader2, MapPin, Calendar } from 'lucide-react';
+import { toast } from 'sonner';
 import { calculateCurrentUnitPrice } from '@/lib/calculator/priceCalculator';
 import { fetchActiveProject, fetchCampaignTotalArea, createBooking, type BookingData } from '@/lib/api';
 import { Project } from '@/types/database';
@@ -58,7 +60,7 @@ export default function Home() {
 
   const handleFormSubmit = async (formData: FarmerFormData) => {
     if (!project || !polygon) {
-      alert('案件情報または圃場データが不足しています');
+      toast.error('案件情報または圃場データが不足しています');
       return;
     }
 
@@ -91,23 +93,21 @@ export default function Home() {
     const result = await createBooking(bookingData);
 
     if (result.success) {
-      alert(`予約が完了しました!\n予約ID: ${result.bookingId}\n\n確認メールを ${formData.email} に送信しました。`);
-      // Reset form
+      toast.success(`予約が完了しました。予約ID: ${result.bookingId}`);
       setArea10r(0);
       setPolygon(null);
       setCoords(null);
-      // Reload to clear map and refresh total area
       window.location.reload();
     } else {
-      alert(`予約に失敗しました: ${result.error}`);
+      toast.error(result.error || '予約に失敗しました');
     }
   };
 
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 text-green-600 animate-spin" />
           <p className="text-slate-600 font-medium">読み込み中...</p>
         </div>
       </main>
@@ -118,7 +118,9 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-lg border border-slate-200 max-w-md text-center">
-          <div className="text-6xl mb-4">🌾</div>
+          <div className="flex justify-center mb-4">
+            <MapPin className="w-16 h-16 text-slate-300" />
+          </div>
           <h1 className="text-2xl font-bold text-slate-800 mb-2">現在募集中の案件はありません</h1>
           <p className="text-slate-600">新しい案件が開始されるまでお待ちください。</p>
         </div>
@@ -128,40 +130,37 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-green-50/30">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">
-                <span className="text-green-600 mr-2">🌾 Wayfinder</span>AgriX
-              </h1>
-              <p className="text-slate-500 text-sm font-medium mt-1">農作業予約システム</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-green-600" />
+            <p className="text-slate-700 font-bold">募集中の案件</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 flex items-center gap-1">
+              <MapPin className="w-4 h-4 text-blue-600" />
+              <span className="text-blue-700 font-bold text-xs">
+                累計: {totalCampaignArea.toFixed(1)} 反
+              </span>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
-                <span className="text-blue-700 font-bold text-xs">
-                  累計: {totalCampaignArea.toFixed(1)} 反
-                </span>
-              </div>
-              <div className="flex items-center gap-2 bg-green-50 px-4 py-2 rounded-full border border-green-200">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-green-700 font-bold text-sm">募集中</span>
-              </div>
+            <div className="flex items-center gap-2 bg-green-50 px-4 py-2 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-green-700 font-bold text-sm">募集中</span>
             </div>
           </div>
         </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           {/* Left Column: Map */}
           <section className="order-2 lg:order-1">
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 h-[500px] lg:h-[700px] relative">
-              <div className="absolute top-6 left-6 z-[1000] bg-white/95 backdrop-blur px-4 py-2 rounded-xl shadow-md border border-slate-200">
-                <h2 className="text-sm font-bold text-slate-600 mb-1">圃場を描画</h2>
-                <p className="text-xs text-slate-500">地図上でクリックして圃場の範囲を指定</p>
+              <div className="absolute top-6 left-6 z-[1000] bg-white/95 backdrop-blur px-4 py-2 rounded-xl shadow-md border border-slate-200 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-green-600" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-600">圃場を描画</h2>
+                  <p className="text-xs text-slate-500">地図上でクリックして圃場の範囲を指定</p>
+                </div>
               </div>
 
               {/* Area Display Overlay */}

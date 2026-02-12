@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Project } from '@/types/database';
 import { calculateCurrentUnitPrice, calculateFinalAmount, calculateTax } from '@/lib/calculator/priceCalculator';
 import type { CampaignPricing } from '@/lib/calculator/types';
@@ -100,7 +101,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
         }
 
         if (area10r <= 0) {
-            alert('地図上で圃場を描画してください');
+            toast.error('地図上で圃場を描画してください');
             return;
         }
 
@@ -109,7 +110,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
             await onSubmit(formData);
         } catch (error) {
             console.error('Submission error:', error);
-            alert('予約の送信に失敗しました。もう一度お試しください。');
+            toast.error('予約の送信に失敗しました。もう一度お試しください。');
         } finally {
             setIsSubmitting(false);
         }

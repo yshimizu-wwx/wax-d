@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
+import { getCurrentUser } from '@/lib/auth';
 import { createCampaign } from '@/lib/api';
 import type { Polygon } from 'geojson';
 
@@ -44,11 +46,16 @@ interface CampaignFormData {
 }
 
 export default function CampaignCreatePage() {
+    const [providerId, setProviderId] = useState<string | null>(null);
     const [polygon, setPolygon] = useState<Polygon | null>(null);
     const [coords, setCoords] = useState<{ lat: number; lng: number }[] | null>(null);
     const [area10r, setArea10r] = useState<number>(0);
     const [step, setStep] = useState<1 | 2>(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        getCurrentUser().then((u) => u?.role === 'provider' && u?.id && setProviderId(u.id));
+    }, []);
 
     const [formData, setFormData] = useState<CampaignFormData>({
         cropId: '',
@@ -86,28 +93,30 @@ export default function CampaignCreatePage() {
         e.preventDefault();
 
         if (!polygon) {
-            alert('対象エリアを地図で描画してください');
+            toast.error('対象エリアを地図で描画してください');
             return;
         }
 
         setIsSubmitting(true);
 
         try {
-            const result = await createCampaign({
-                ...formData,
-                targetAreaPolygon: polygon,
-            });
+            const result = await createCampaign(
+                {
+                    ...formData,
+                    targetAreaPolygon: polygon,
+                },
+                providerId || undefined
+            );
 
             if (result.success) {
-                alert('案件を作成しました！');
-                // Redirect to campaign list
-                window.location.href = '/';
+                toast.success('案件を作成しました');
+                window.location.href = '/admin';
             } else {
-                alert(`エラー: ${result.error}`);
+                toast.error(result.error || '案件の作成に失敗しました');
             }
         } catch (error) {
             console.error('Campaign creation error:', error);
-            alert('案件の作成に失敗しました');
+            toast.error('案件の作成に失敗しました');
         } finally {
             setIsSubmitting(false);
         }

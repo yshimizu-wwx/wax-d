@@ -40,10 +40,26 @@ export interface Project {
 }
 
 export interface Booking {
-    id: string; // uuid
-    project_id: string; // foreign key to projects.id
-    farmer_name: string;
-    locked_price: number;
-    // Add other fields as necessary
+    id: string;
+    campaign_id: string;
+    farmer_id?: string;
+    farmer_name?: string;
+    locked_price?: number;
+    area_10r?: number;
+    status?: string;
+    work_status?: string;
+    applied_at?: string;
+    created_at?: string;
+}
+
+export type MasterType = 'crop' | 'task_category' | 'task_detail' | 'pesticide';
+
+export interface Master {
+    id: string;
+    provider_id: string | null;
+    type: MasterType;
+    name: string;
+    parent_id: string | null;
+    status: 'active' | 'inactive';
     created_at?: string;
 }
