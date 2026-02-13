@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,24 +12,46 @@ import {
   Sprout,
   ArrowRight,
   LogIn,
+  Filter,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateCurrentUnitPrice } from '@/lib/calculator/priceCalculator';
 import {
-  fetchOpenCampaigns,
+  fetchCampaigns,
   fetchCampaignTotalArea,
   fetchBookingsByFarmer,
+  fetchFieldsByFarmer,
+  fetchLinkedProvidersForFarmer,
   createBooking,
+  requestCancelBooking,
   type BookingData,
   type FarmerBookingItem,
+  type LinkedProvider,
 } from '@/lib/api';
 import { getCurrentUser, type User } from '@/lib/auth';
-import { Project } from '@/types/database';
+import { Project, type Field } from '@/types/database';
+import { isFieldInCampaignArea } from '@/lib/geo/spatial-queries';
 import type { Polygon } from 'geojson';
 import type { FarmerFormData } from '@/components/CampaignForm';
 import CampaignTimelineCard, { type CampaignWithArea } from '@/components/CampaignTimelineCard';
+import ApplicationDialog, { type ApplicationFormData } from '@/components/ApplicationDialog';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import FarmerDashboardContent from './FarmerDashboardContent';
+
+function parseInterestedCropIds(raw: string | null | undefined): string[] {
+  if (raw == null || raw === '') return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) return parsed as string[];
+  } catch {
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
 
 const PolygonMap = dynamic(() => import('@/components/PolygonMap'), {
   ssr: false,
@@ -50,14 +72,26 @@ export default function Home() {
   const [userLoading, setUserLoading] = useState(true);
 
   const [openCampaigns, setOpenCampaigns] = useState<Project[]>([]);
-  const [openCampaignsWithArea, setOpenCampaignsWithArea] = useState<CampaignWithArea[]>([]);
+  const [allCampaignsWithArea, setAllCampaignsWithArea] = useState<CampaignWithArea[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignWithArea | null>(null);
   const [loading, setLoading] = useState(true);
   const [area10r, setArea10r] = useState<number>(0);
   const [polygon, setPolygon] = useState<Polygon | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number }[] | null>(null);
   const [farmerBookings, setFarmerBookings] = useState<FarmerBookingItem[]>([]);
+  const [farmerFields, setFarmerFields] = useState<Field[]>([]);
+  const [linkedProviders, setLinkedProviders] = useState<LinkedProvider[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [applicationDialogOpen, setApplicationDialogOpen] = useState(false);
+  const [applicationCampaign, setApplicationCampaign] = useState<CampaignWithArea | null>(null);
   const applySectionRef = useRef<HTMLDivElement>(null);
+
+  // 案件一覧フィルタ（農家用）
+  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'past'>('all');
+  const [filterByMyFields, setFilterByMyFields] = useState(false);
+  const [filterByMyCrops, setFilterByMyCrops] = useState(false);
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -75,18 +109,33 @@ export default function Home() {
     }
   }, [user, userLoading, router]);
 
-  // 未ログイン: 公開案件一覧
+  // 未ログイン: 公開案件一覧（募集中のみ）
   useEffect(() => {
     if (userLoading || user) return;
-    fetchOpenCampaigns().then(setOpenCampaigns).finally(() => setLoading(false));
+    fetchCampaigns({ status: 'open' }).then(setOpenCampaigns).finally(() => setLoading(false));
   }, [userLoading, user]);
 
-  // 農家: 公開案件一覧（合計面積付き）+ 申込履歴 → タイムライン表示用
+  // 農家: 紐付き業者一覧・申込履歴・畑を取得
   useEffect(() => {
     if (userLoading || !user || user.role !== 'farmer') return;
+    setLoading(false); // 業者選択画面ではローダーを出さない
+    fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    fetchBookingsByFarmer(user.id).then(setFarmerBookings);
+    fetchFieldsByFarmer(user.id).then(setFarmerFields);
+  }, [userLoading, user]);
+
+  // 農家: 選択した業者の案件のみ取得（業者を選んだとき）
+  useEffect(() => {
+    if (userLoading || !user || user.role !== 'farmer' || !selectedProviderId) {
+      if (user?.role === 'farmer' && !selectedProviderId) {
+        setAllCampaignsWithArea([]);
+        setSelectedCampaign(null);
+      }
+      return;
+    }
     let cancelled = false;
     setLoading(true);
-    fetchOpenCampaigns()
+    fetchCampaigns({ status: 'all', providerId: selectedProviderId })
       .then((campaigns) => {
         if (cancelled) return;
         return Promise.all(
@@ -97,7 +146,7 @@ export default function Home() {
       })
       .then((withArea) => {
         if (cancelled || !withArea) return;
-        setOpenCampaignsWithArea(withArea);
+        setAllCampaignsWithArea(withArea);
         setSelectedCampaign((prev) => {
           const first = withArea[0] ?? null;
           if (!prev) return first;
@@ -106,20 +155,8 @@ export default function Home() {
         });
       })
       .finally(() => { if (!cancelled) setLoading(false); });
-
-    if (user.id) {
-      fetchBookingsByFarmer(user.id).then((bookings) => {
-        if (!cancelled) setFarmerBookings(bookings);
-      });
-    }
     return () => { cancelled = true; };
-  }, [userLoading, user]);
-
-  // 「申し込む」で案件選択したら申込フォームへスクロール
-  useEffect(() => {
-    if (!selectedCampaign || !applySectionRef.current) return;
-    applySectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [selectedCampaign?.id]);
+  }, [userLoading, user, selectedProviderId]);
 
   const handlePolygonComplete = (
     newCoords: { lat: number; lng: number }[] | null,
@@ -132,6 +169,81 @@ export default function Home() {
   };
 
   const totalCampaignArea = selectedCampaign?.totalArea10r ?? 0;
+
+  // 農家: 自分の品目ID・畑が案件エリアに入っているか・フィルタ＆ソート済み一覧
+  const myCropIds = useMemo(
+    () => (user?.role === 'farmer' ? parseInterestedCropIds(user.interested_crop_ids) : []),
+    [user]
+  );
+  const campaignFieldMatch = useMemo(() => {
+    const map = new Map<string, boolean>();
+    allCampaignsWithArea.forEach((c) => {
+      const polygon = (c.target_area_polygon ?? undefined) as string | Polygon | null | undefined;
+      const match = farmerFields.some((f) => isFieldInCampaignArea(f, polygon));
+      map.set(c.id, match);
+    });
+    return map;
+  }, [allCampaignsWithArea, farmerFields]);
+  const campaignCropMatch = useMemo(() => {
+    const map = new Map<string, boolean>();
+    allCampaignsWithArea.forEach((c) => {
+      const match = Boolean(
+        c.target_crop_id && myCropIds.length > 0 && myCropIds.includes(c.target_crop_id)
+      );
+      map.set(c.id, match);
+    });
+    return map;
+  }, [allCampaignsWithArea, myCropIds]);
+
+  const openCampaignsWithArea = useMemo(() => {
+    let list = allCampaignsWithArea;
+    if (filterStatus === 'open') {
+      list = list.filter(
+        (c) => c.status === 'open' && c.is_closed !== true
+      );
+    } else if (filterStatus === 'past') {
+      list = list.filter((c) => c.status === 'closed' || c.status === 'completed');
+    }
+    if (filterDateFrom) {
+      list = list.filter((c) => c.start_date && c.start_date >= filterDateFrom);
+    }
+    if (filterDateTo) {
+      list = list.filter((c) => c.end_date && c.end_date <= filterDateTo);
+    }
+    if (filterByMyFields) {
+      list = list.filter((c) => campaignFieldMatch.get(c.id));
+    }
+    if (filterByMyCrops) {
+      list = list.filter((c) => campaignCropMatch.get(c.id));
+    }
+    // 並び順: 自分の畑エリア＆自分の品目 → 自分の品目 → 自分の畑エリア → その他
+    return [...list].sort((a, b) => {
+      const aField = campaignFieldMatch.get(a.id) ?? false;
+      const aCrop = campaignCropMatch.get(a.id) ?? false;
+      const bField = campaignFieldMatch.get(b.id) ?? false;
+      const bCrop = campaignCropMatch.get(b.id) ?? false;
+      const score = (f: boolean, c: boolean) => (f && c ? 3 : c ? 2 : f ? 1 : 0);
+      return score(bField, bCrop) - score(aField, aCrop);
+    });
+  }, [
+    allCampaignsWithArea,
+    filterStatus,
+    filterDateFrom,
+    filterDateTo,
+    filterByMyFields,
+    filterByMyCrops,
+    campaignFieldMatch,
+    campaignCropMatch,
+  ]);
+
+  // フィルタ結果に選択中案件が含まれない場合は先頭を選択
+  useEffect(() => {
+    if (user?.role !== 'farmer' || openCampaignsWithArea.length === 0) return;
+    const stillInList = selectedCampaign && openCampaignsWithArea.some((c) => c.id === selectedCampaign.id);
+    if (!stillInList) {
+      setSelectedCampaign(openCampaignsWithArea[0] ?? null);
+    }
+  }, [user?.role, openCampaignsWithArea, selectedCampaign]);
 
   const handleFormSubmit = async (formData: FarmerFormData) => {
     if (!selectedCampaign || !polygon) {
@@ -168,7 +280,7 @@ export default function Home() {
       setPolygon(null);
       setCoords(null);
       if (user?.id) fetchBookingsByFarmer(user.id).then(setFarmerBookings);
-      setOpenCampaignsWithArea((prev) =>
+      setAllCampaignsWithArea((prev) =>
         prev.map((c) =>
           c.id === selectedCampaign.id
             ? { ...c, totalArea10r: (c.totalArea10r ?? 0) + area10r }
@@ -182,6 +294,63 @@ export default function Home() {
       );
     } else {
       toast.error(result.error || '予約に失敗しました');
+    }
+  };
+
+  const handleApplicationDialogSubmit = async (data: ApplicationFormData) => {
+    const campaign = applicationCampaign;
+    if (!campaign || !user?.id || user.role !== 'farmer') return;
+    const totalNewArea = data.selections.reduce((sum, s) => sum + s.area10r, 0);
+    const pricing = {
+      base_price: campaign.base_price || 0,
+      min_price: campaign.min_price || 0,
+      target_area_10r: campaign.target_area_10r || 0,
+      min_target_area_10r: campaign.min_target_area_10r ?? undefined,
+      max_target_area_10r: campaign.max_target_area_10r ?? undefined,
+      execution_price: campaign.execution_price ?? undefined,
+    };
+    const totalArea = (campaign.totalArea10r ?? 0) + totalNewArea;
+    const validation = calculateCurrentUnitPrice(pricing, totalArea);
+    const lockedPrice = validation.currentPrice ?? campaign.base_price ?? 0;
+
+    for (const sel of data.selections) {
+      const bookingData: BookingData = {
+        campaign_id: campaign.id,
+        farmer_id: user.id,
+        farmer_name: user.name ?? '',
+        phone: user.phone ?? '',
+        email: user.email ?? '',
+        desired_start_date: data.desiredStartDate || undefined,
+        desired_end_date: data.desiredEndDate || undefined,
+        field_id: sel.fieldId,
+        area_10r: sel.area10r,
+        locked_price: lockedPrice,
+      };
+      const result = await createBooking(bookingData);
+      if (!result.success) {
+        toast.error(result.error || '申し込みに失敗しました');
+        throw new Error(result.error);
+      }
+    }
+
+    const count = data.selections.length;
+    toast.success(count > 1 ? `${count}件の申し込みが完了しました` : '申し込みが完了しました');
+    fetchBookingsByFarmer(user.id).then(setFarmerBookings);
+    setAllCampaignsWithArea((prev) =>
+      prev.map((c) =>
+        c.id === campaign.id ? { ...c, totalArea10r: (c.totalArea10r ?? 0) + totalNewArea } : c
+      )
+    );
+  };
+
+  const handleRequestCancel = async (bookingId: string) => {
+    if (!user?.id || user.role !== 'farmer') return;
+    const result = await requestCancelBooking(bookingId, user.id);
+    if (result.success) {
+      toast.success('キャンセル依頼を送りました。業者に連絡が入ります。');
+      fetchBookingsByFarmer(user.id).then(setFarmerBookings);
+    } else {
+      toast.error(result.error || 'キャンセル依頼に失敗しました');
     }
   };
 
@@ -276,195 +445,49 @@ export default function Home() {
     return null;
   }
 
-  if (loading && openCampaignsWithArea.length === 0 && user?.role === 'farmer') {
+  // 農家で業者を選択済みかつ案件取得中のみローダー表示
+  if (user?.role === 'farmer' && selectedProviderId && loading && allCampaignsWithArea.length === 0) {
     return (
       <main className="min-h-full flex items-center justify-center">
-        <AppLoader message="読み込み中..." />
+        <AppLoader message="案件を読み込み中..." />
       </main>
     );
   }
 
-  const statusLabel: Record<string, string> = {
-    confirmed: '確定',
-    pending: '確認待ち',
-    completed: '完了',
-    canceled: 'キャンセル',
-  };
-
   return (
-    <main className="min-h-full">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-        {user?.role === 'farmer' && (
-          <section className="mb-8">
-            <h2 className="text-lg font-bold text-dashboard-text mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-agrix-forest" />
-              予約募集一覧
-            </h2>
-            {openCampaignsWithArea.length === 0 ? (
-              <Card className="mb-8">
-                <CardContent className="p-10 flex flex-col items-center justify-center text-center">
-                  <div className="rounded-full bg-dashboard-muted/20 p-6 mb-4">
-                    <MapPin className="w-12 h-12 text-dashboard-muted" />
-                  </div>
-                  <p className="font-bold text-dashboard-text mb-1">現在募集中の案件はありません</p>
-                  <p className="text-sm text-dashboard-muted">新しい案件が公開されるとここに表示されます。</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <ul className="space-y-4">
-                {openCampaignsWithArea.map((campaign) => (
-                  <li key={campaign.id}>
-                    <CampaignTimelineCard
-                      campaign={campaign}
-                      onSelect={(c) => setSelectedCampaign(c)}
-                      isSelected={selectedCampaign?.id === campaign.id}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-
-        {/* 選択した案件: 地図 + 申込フォーム */}
-        {user?.role === 'farmer' && selectedCampaign && (
-          <div ref={applySectionRef} id="apply-section" className="scroll-mt-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <p className="text-dashboard-text font-bold text-sm">
-                申し込む案件: {(selectedCampaign as { campaign_title?: string }).campaign_title || selectedCampaign.location}
-              </p>
-              <div className="flex items-center gap-2 bg-agrix-forest/10 text-agrix-forest px-3 py-1.5 rounded-lg border border-agrix-forest/30">
-                <span className="text-xs font-bold">累計</span>
-                <span className="font-black">{(selectedCampaign.totalArea10r ?? 0).toFixed(1)} 反</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-              <section className="order-2 lg:order-1">
-                <Card className="p-4 h-[500px] lg:h-[700px] relative overflow-hidden">
-                  <div className="absolute top-4 left-4 z-[1000] bg-dashboard-card/95 backdrop-blur px-4 py-2 rounded-xl shadow-md border border-dashboard-border flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-agrix-forest" />
-                    <div>
-                      <h2 className="text-sm font-bold text-dashboard-text">圃場を描画</h2>
-                      <p className="text-xs text-dashboard-muted">地図上でクリックして圃場の範囲を指定</p>
-                    </div>
-                  </div>
-                  {area10r > 0 && (
-                    <div className="absolute top-4 right-4 z-[1000] bg-agrix-forest text-white px-5 py-3 rounded-xl shadow-sm border-2 border-agrix-gold/50 min-w-[180px]">
-                      <div className="text-xs font-bold uppercase tracking-wider mb-1 opacity-90">選択面積</div>
-                      <div className="text-2xl font-black">
-                        {area10r.toFixed(2)} <span className="text-sm font-normal opacity-90">反</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="w-full h-full rounded-xl overflow-hidden absolute inset-0 p-4 pt-14">
-                    <PolygonMap
-                      onPolygonComplete={handlePolygonComplete}
-                      initialPolygon={coords || undefined}
-                    />
-                  </div>
-                </Card>
-              </section>
-              <section className="order-1 lg:order-2">
-                <Card>
-                  <CardContent className="p-6">
-                    <CampaignForm
-                      project={selectedCampaign}
-                      area10r={area10r}
-                      totalCampaignArea={totalCampaignArea}
-                      onSubmit={handleFormSubmit}
-                      initialFormData={
-                        user?.role === 'farmer' && user
-                          ? {
-                              farmerName: user.name ?? '',
-                              phone: user.phone ?? '',
-                              email: user.email ?? '',
-                            }
-                          : undefined
-                      }
-                    />
-                  </CardContent>
-                </Card>
-              </section>
-            </div>
-          </div>
-        )}
-
-        <section id="applications" className="mb-8">
-          <h2 className="text-lg font-bold text-dashboard-text mb-4 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-agrix-forest" />
-            申込履歴
-          </h2>
-          <Card className="overflow-hidden">
-            {farmerBookings.length === 0 ? (
-              <CardContent className="p-10 flex flex-col items-center justify-center text-center">
-                <div className="rounded-full bg-dashboard-muted/20 p-6 mb-4">
-                  <FileText className="w-12 h-12 text-dashboard-muted" />
-                </div>
-                <p className="font-bold text-dashboard-text mb-1">まだ申込がありません</p>
-                <p className="text-sm text-dashboard-muted">案件を選択して申し込むと、ここに履歴が表示されます。</p>
-              </CardContent>
-            ) : (
-              <ul className="divide-y divide-dashboard-border">
-                {farmerBookings.map((b) => (
-                  <li key={b.id} className="p-4 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-bold text-dashboard-text">
-                        {b.project?.campaign_title || b.project?.location || b.campaign_id}
-                      </p>
-                      <p className="text-sm text-dashboard-muted">
-                        {b.area_10r} 反
-                        {b.locked_price != null && ` · ¥${(b.area_10r * b.locked_price).toLocaleString()}`}
-                        {' · '}
-                        {statusLabel[b.status] || b.status}
-                        {b.created_at &&
-                          ` · ${new Date(b.created_at).toLocaleDateString('ja-JP')}`}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </section>
-
-        <section id="my-field">
-          <h2 className="text-lg font-bold text-dashboard-text mb-4 flex items-center gap-2">
-            <Sprout className="w-5 h-5 text-agrix-forest" />
-            My畑管理
-          </h2>
-          <Card>
-            <CardContent className="p-10 flex flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-agrix-forest/10 p-6 mb-4">
-                <Sprout className="w-12 h-12 text-agrix-forest" />
-              </div>
-              <p className="font-bold text-dashboard-text mb-1">圃場情報の登録・管理</p>
-              <p className="text-sm text-dashboard-muted mb-4">畑を登録すると、作業依頼や申込時に選択できます。</p>
-              <Link
-                href="/my-fields"
-                className="inline-flex items-center gap-2 bg-agrix-forest text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-agrix-forest-dark transition-colors"
-              >
-                <Sprout className="w-4 h-4" />
-                マイ畑を管理する
-              </Link>
-            </CardContent>
-          </Card>
-        </section>
-
-        <footer className="mt-8 text-center text-sm text-dashboard-muted">
-          <p>ご不明な点がございましたら、お気軽にお問い合わせください。</p>
-          <p className="mt-2">
-            © 2026{' '}
-            <a
-              href="https://wayfinderworx.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-dashboard-text hover:text-agrix-forest underline underline-offset-2"
-            >
-              Wayfinder WorX
-            </a>
-          </p>
-        </footer>
-      </div>
-    </main>
+    <FarmerDashboardContent
+      user={user}
+      linkedProviders={linkedProviders}
+      selectedProviderId={selectedProviderId}
+      setSelectedProviderId={setSelectedProviderId}
+      openCampaignsWithArea={openCampaignsWithArea}
+      selectedCampaign={selectedCampaign}
+      setSelectedCampaign={setSelectedCampaign}
+      applicationDialogOpen={applicationDialogOpen}
+      setApplicationDialogOpen={setApplicationDialogOpen}
+      applicationCampaign={applicationCampaign}
+      setApplicationCampaign={setApplicationCampaign}
+      farmerBookings={farmerBookings}
+      farmerFields={farmerFields}
+      onApplicationDialogSubmit={handleApplicationDialogSubmit}
+      applySectionRef={applySectionRef}
+      area10r={area10r}
+      coords={coords}
+      onPolygonComplete={handlePolygonComplete}
+      totalCampaignArea={totalCampaignArea}
+      onFormSubmit={handleFormSubmit}
+      onRequestCancel={handleRequestCancel}
+      filterByMyFields={filterByMyFields}
+      setFilterByMyFields={setFilterByMyFields}
+      filterByMyCrops={filterByMyCrops}
+      setFilterByMyCrops={setFilterByMyCrops}
+      filterStatus={filterStatus}
+      setFilterStatus={setFilterStatus}
+      filterDateFrom={filterDateFrom}
+      setFilterDateFrom={setFilterDateFrom}
+      filterDateTo={filterDateTo}
+      setFilterDateTo={setFilterDateTo}
+    />
   );
 }
+

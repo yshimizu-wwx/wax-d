@@ -53,6 +53,79 @@ export async function fetchOpenCampaigns(supabase: SupabaseClient): Promise<Proj
   return data ?? [];
 }
 
+export type CampaignStatusFilter = 'open' | 'closed' | 'completed' | 'past' | 'all';
+
+export interface FetchCampaignsOptions {
+  /** open=募集中のみ, closed=募集終了, completed=完了, past=過去(closed+completed), all=すべて */
+  status?: CampaignStatusFilter;
+  /** 作業開始日の下限（YYYY-MM-DD）。指定時は start_date >= dateFrom の案件のみ */
+  dateFrom?: string;
+  /** 作業終了日の上限（YYYY-MM-DD）。指定時は end_date <= dateTo の案件のみ */
+  dateTo?: string;
+  /** 指定時はその業者の案件のみ取得（農家が業者を選んだとき用） */
+  providerId?: string;
+}
+
+/**
+ * 案件一覧用: ステータス・日付でフィルタ可能に取得。
+ */
+export async function fetchCampaigns(
+  supabase: SupabaseClient,
+  options: FetchCampaignsOptions = {}
+): Promise<Project[]> {
+  const { status = 'all', dateFrom, dateTo, providerId } = options;
+  let query = supabase.from('campaigns').select('*');
+
+  if (providerId) {
+    query = query.eq('provider_id', providerId);
+  }
+
+  if (status !== 'all') {
+    if (status === 'open') {
+      query = query.eq('status', 'open').eq('is_closed', false);
+    } else if (status === 'past') {
+      query = query.in('status', ['closed', 'completed']);
+    } else {
+      query = query.eq('status', status);
+    }
+  }
+
+  if (dateFrom) {
+    query = query.gte('start_date', dateFrom);
+  }
+  if (dateTo) {
+    query = query.lte('end_date', dateTo);
+  }
+
+  query = query.order('created_at', { ascending: false });
+  const { data, error } = await query;
+  if (error) {
+    console.error('Error fetching campaigns:', error);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
+ * Fetches a single campaign by ID. If providerId is set, only returns the campaign if it belongs to that provider.
+ */
+export async function fetchCampaignById(
+  supabase: SupabaseClient,
+  campaignId: string,
+  providerId?: string
+): Promise<Project | null> {
+  let query = supabase
+    .from('campaigns')
+    .select('*')
+    .eq('id', campaignId);
+  if (providerId) {
+    query = query.eq('provider_id', providerId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+  return data as Project;
+}
+
 /**
  * Fetches the single active project (open, not closed). Returns null if none.
  */
@@ -212,6 +285,7 @@ export async function closeCampaign(
 
 /**
  * Sets campaign status to 'completed'.
+ * @deprecated 作業確定は setWorkConfirmBulk / setWorkConfirmIndividual を使用してください。
  */
 export async function setCampaignCompleted(
   supabase: SupabaseClient,
@@ -223,4 +297,90 @@ export async function setCampaignCompleted(
     .eq('id', campaignId);
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+/**
+ * 作業確定（一斉）: 案件に作業日を1日設定し、全申込にその日付を通知する。
+ * campaign.final_date と 全 bookings.confirmed_date を設定し、status を completed にする。
+ */
+export async function setWorkConfirmBulk(
+  supabase: SupabaseClient,
+  campaignId: string,
+  finalDate: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error: campaignErr } = await supabase
+    .from('campaigns')
+    .update({ final_date: finalDate, status: 'completed' })
+    .eq('id', campaignId);
+  if (campaignErr) return { success: false, error: campaignErr.message };
+
+  const { error: bookingsErr } = await supabase
+    .from('bookings')
+    .update({ confirmed_date: finalDate })
+    .eq('campaign_id', campaignId)
+    .neq('status', 'canceled');
+  if (bookingsErr) return { success: false, error: bookingsErr.message };
+  return { success: true };
+}
+
+/**
+ * 作業確定（個別）: 各申込に日付（と時間）を設定する。
+ * updates の bookingId に対応する confirmed_date を更新し、案件 status を completed にする。
+ */
+export async function setWorkConfirmIndividual(
+  supabase: SupabaseClient,
+  campaignId: string,
+  updates: { bookingId: string; confirmedDate: string }[]
+): Promise<{ success: boolean; error?: string }> {
+  for (const u of updates) {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ confirmed_date: u.confirmedDate })
+      .eq('id', u.bookingId)
+      .eq('campaign_id', campaignId);
+    if (error) return { success: false, error: error.message };
+  }
+  const { error } = await supabase
+    .from('campaigns')
+    .update({ status: 'completed' })
+    .eq('id', campaignId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/**
+ * ルート案表示用: 案件の申込一覧（畑情報付き）を取得。業者拠点からの1日ルート計算に使う。
+ */
+export interface BookingForRoute {
+  id: string;
+  farmer_id: string | null;
+  farmer_name: string | null;
+  area_10r: number;
+  field_id: string | null;
+  field: { id: string; lat: number | null; lng: number | null; address: string | null; name: string } | null;
+}
+
+export async function fetchBookingsWithFieldsForRoute(
+  supabase: SupabaseClient,
+  campaignId: string
+): Promise<BookingForRoute[]> {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, farmer_id, farmer_name, area_10r, field_id, fields(id, lat, lng, address, name)')
+    .eq('campaign_id', campaignId)
+    .neq('status', 'canceled');
+
+  if (error) {
+    console.error('fetchBookingsWithFieldsForRoute:', error);
+    return [];
+  }
+
+  return (data ?? []).map((row: Record<string, unknown>): BookingForRoute => ({
+    id: String(row.id ?? ''),
+    farmer_id: (row.farmer_id ?? null) as string | null,
+    farmer_name: (row.farmer_name ?? null) as string | null,
+    area_10r: Number(row.area_10r) || 0,
+    field_id: (row.field_id ?? null) as string | null,
+    field: (row.fields ?? null) as BookingForRoute['field'],
+  }));
 }

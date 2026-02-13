@@ -1,15 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
-import { createCampaign } from '@/lib/api';
+import { createCampaign, fetchCampaignById } from '@/lib/api';
 import { fetchMasters, createMaster } from '@/lib/masters';
 import type { Master } from '@/types/database';
 import type { Polygon } from 'geojson';
+import { parseCampaignPolygon } from '@/lib/geo/spatial-queries';
+import { calculatePolygonArea10r } from '@/lib/geo/areaCalculator';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowRight, ArrowLeft, Copy } from 'lucide-react';
+import type { Project } from '@/types/database';
 
 // Dynamically import PolygonMap to avoid SSR issues
 const PolygonMap = dynamic(() => import('@/components/PolygonMap'), {
@@ -49,7 +53,28 @@ interface CampaignFormData {
     confirmationDeadlineDays: number;
 }
 
-export default function CampaignCreatePage() {
+function campaignRowToFormData(c: Project): CampaignFormData {
+    return {
+        cropId: c.target_crop_id ?? '',
+        categoryId: c.task_category_id ?? '',
+        detailId: c.task_detail_id ?? '',
+        location: c.location ?? '',
+        startDate: c.start_date ?? '',
+        endDate: c.end_date ?? '',
+        pesticide: c.pesticide_name ?? c.pesticide ?? '',
+        dilutionRate: c.dilution_rate != null ? String(c.dilution_rate) : '',
+        amountPer10r: c.amount_per_10r != null ? String(c.amount_per_10r) : '',
+        basePrice: Number(c.base_price) || 0,
+        minPrice: Number(c.min_price) || 0,
+        minTargetArea10r: Number(c.min_target_area_10r) || 0,
+        targetArea10r: Number(c.target_area_10r) || 0,
+        confirmationDeadlineDays: Number(c.confirmation_deadline_days) || 0,
+    };
+}
+
+function CampaignCreatePageContent() {
+    const searchParams = useSearchParams();
+    const copyFromId = searchParams.get('copyFrom');
     const [user, setUser] = useState<User | null>(null);
     const [providerId, setProviderId] = useState<string | null>(null);
     const [polygon, setPolygon] = useState<Polygon | null>(null);
@@ -57,6 +82,9 @@ export default function CampaignCreatePage() {
     const [area10r, setArea10r] = useState<number>(0);
     const [step, setStep] = useState<1 | 2>(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [copySourceTitle, setCopySourceTitle] = useState<string | null>(null);
+    const [copyLoadError, setCopyLoadError] = useState<string | null>(null);
+    const [copyLoading, setCopyLoading] = useState(false);
     const [crops, setCrops] = useState<Master[]>([]);
     const [taskCategories, setTaskCategories] = useState<Master[]>([]);
     const [taskDetails, setTaskDetails] = useState<Master[]>([]);
@@ -75,6 +103,38 @@ export default function CampaignCreatePage() {
             if (u?.role === 'provider' && u?.id) setProviderId(u.id);
         });
     }, []);
+
+    // 過去案件コピー: copyFrom で指定された案件を取得してフォーム・ポリゴンを事前入力
+    useEffect(() => {
+        if (!copyFromId || !providerId) return;
+        let cancelled = false;
+        setCopyLoading(true);
+        setCopyLoadError(null);
+        fetchCampaignById(copyFromId, providerId)
+            .then((c) => {
+                if (cancelled || !c) {
+                    if (!cancelled && copyFromId) setCopyLoadError('案件の取得に失敗しました。権限を確認するか、URLを確認してください。');
+                    return;
+                }
+                setCopySourceTitle(c.campaign_title || c.location || '（無題）');
+                setFormData(campaignRowToFormData(c));
+                const poly = parseCampaignPolygon(c.target_area_polygon);
+                if (poly) {
+                    setPolygon(poly);
+                    const initialCoords = poly.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
+                    setCoords(initialCoords);
+                    setArea10r(calculatePolygonArea10r(poly));
+                    setStep(2);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setCopyLoadError('コピー元の案件を読み込めませんでした。');
+            })
+            .finally(() => {
+                if (!cancelled) setCopyLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [copyFromId, providerId]);
 
     const masterProviderId = user?.role === 'provider' ? user?.id ?? null : null;
     useEffect(() => {
@@ -301,6 +361,23 @@ export default function CampaignCreatePage() {
             </header>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+                {copyLoading && (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-agrix-forest/30 bg-agrix-forest/10 px-4 py-3 text-sm text-agrix-forest">
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                        過去の案件を読み込み中...
+                    </div>
+                )}
+                {copyLoadError && (
+                    <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        {copyLoadError}
+                    </div>
+                )}
+                {copySourceTitle && !copyLoadError && (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-agrix-forest/30 bg-agrix-forest/10 px-4 py-3 text-sm text-agrix-forest">
+                        <Copy className="h-4 w-4 shrink-0" />
+                        「{copySourceTitle}」から内容をコピーしています。必要に応じて編集してから作成してください。
+                    </div>
+                )}
                 {/* Wizard Steps */}
                 <div className="flex items-center gap-2 mb-6 text-sm">
                     <span className="text-dashboard-muted font-medium">Step {step}/2</span>
@@ -585,6 +662,26 @@ export default function CampaignCreatePage() {
                                         />
                                     </div>
                                 </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-dashboard-text mb-1">
+                                        案件確定日（募集締切の条件） <span className="text-dashboard-muted text-xs font-bold px-2 py-0.5 rounded bg-dashboard-bg border border-dashboard-border ml-1">任意</span>
+                                    </label>
+                                    <p className="text-xs text-dashboard-muted mb-2">
+                                        開始日の何日前までに最低成立面積に達さないと不成立にするか指定します。0の場合はこの条件では締め切りません。
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={formData.confirmationDeadlineDays || ''}
+                                            onChange={(e) => setFormData({ ...formData, confirmationDeadlineDays: Math.max(0, Number(e.target.value) || 0) })}
+                                            placeholder="例: 7"
+                                            className="w-24 p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text placeholder:text-dashboard-muted"
+                                        />
+                                        <span className="text-sm text-dashboard-muted font-medium">日前</span>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Pricing */}
@@ -694,5 +791,22 @@ export default function CampaignCreatePage() {
                 </form>
             </div>
         </main>
+    );
+}
+
+export default function CampaignCreatePage() {
+    return (
+        <Suspense
+            fallback={
+                <main className="min-h-full flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3 text-dashboard-muted">
+                        <Loader2 className="w-8 h-8 animate-spin" />
+                        <p className="text-sm">読み込み中...</p>
+                    </div>
+                </main>
+            }
+        >
+            <CampaignCreatePageContent />
+        </Suspense>
     );
 }
