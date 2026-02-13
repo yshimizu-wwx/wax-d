@@ -29,7 +29,7 @@ export default function FarmerLinkProviderSection() {
       if (result.success) {
         setCode('');
         toast.success('業者と紐付けました。作業依頼ページへ移動します。');
-        router.push('/requests');
+        router.push('/requests?linked=1');
       } else {
         toast.error(result.error ?? '紐付けに失敗しました');
       }

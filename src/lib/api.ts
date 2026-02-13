@@ -39,8 +39,8 @@ export interface BookingData {
   farmer_name: string;
   phone: string;
   email: string;
-  desired_start_date: string;
-  desired_end_date: string;
+  desired_start_date?: string;
+  desired_end_date?: string;
   field_polygon: Polygon;
   area_10r: number;
   locked_price: number;

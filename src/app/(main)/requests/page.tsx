@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { FileText, Send, Sprout } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,8 +26,9 @@ const statusLabel: Record<string, string> = {
   rejected: 'お断り',
 };
 
-export default function RequestsPage() {
+function RequestsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<WorkRequest[]>([]);
@@ -51,6 +52,16 @@ export default function RequestsPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // マイページで紐づけした直後に ?linked=1 で遷移してきた場合、紐付き業者を確実に再取得
+  useEffect(() => {
+    if (!user || user.role !== 'farmer' || searchParams.get('linked') !== '1') return;
+    const refetch = () => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    refetch();
+    const t = window.setTimeout(refetch, 400);
+    router.replace('/requests', { scroll: false });
+    return () => window.clearTimeout(t);
+  }, [user, searchParams, router]);
 
   // 他タブで紐づけしたあとこのタブに戻ったときに再取得する
   useEffect(() => {
@@ -131,7 +142,14 @@ export default function RequestsPage() {
               fields={fields}
               linkedProviders={linkedProviders}
               onSubmit={handleSubmit}
-              onRefetchRequested={() => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders)}
+              onRefetchRequested={async () => {
+                const list = await fetchLinkedProvidersForFarmer(user.id);
+                setLinkedProviders(list);
+                toast.success('確認しました');
+                if (list.length === 0) {
+                  toast.info('紐付いた業者が表示されません。一度ログアウトして再ログインするか、招待コードをマイページで再度入力してみてください。');
+                }
+              }}
             />
           )}
         </section>
@@ -178,5 +196,17 @@ export default function RequestsPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function RequestsPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-full flex items-center justify-center">
+        <AppLoader message="読み込み中..." />
+      </main>
+    }>
+      <RequestsPageContent />
+    </Suspense>
   );
 }

@@ -30,8 +30,8 @@ export interface BookingCreateInput {
   farmer_name: string;
   phone: string;
   email: string;
-  desired_start_date: string;
-  desired_end_date: string;
+  desired_start_date?: string | null;
+  desired_end_date?: string | null;
   field_polygon: Polygon;
   area_10r: number;
   locked_price: number;
@@ -174,8 +174,8 @@ export async function createBooking(
       farmer_name: input.farmer_name,
       phone: input.phone,
       email: input.email,
-      desired_start_date: input.desired_start_date,
-      desired_end_date: input.desired_end_date,
+      desired_start_date: input.desired_start_date?.trim() || null,
+      desired_end_date: input.desired_end_date?.trim() || null,
       field_polygon: polygonWKT,
       area_10r: input.area_10r,
       locked_price: input.locked_price,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -57,6 +57,7 @@ export default function Home() {
   const [polygon, setPolygon] = useState<Polygon | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number }[] | null>(null);
   const [farmerBookings, setFarmerBookings] = useState<FarmerBookingItem[]>([]);
+  const applySectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -114,6 +115,12 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [userLoading, user]);
 
+  // 「申し込む」で案件選択したら申込フォームへスクロール
+  useEffect(() => {
+    if (!selectedCampaign || !applySectionRef.current) return;
+    applySectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [selectedCampaign?.id]);
+
   const handlePolygonComplete = (
     newCoords: { lat: number; lng: number }[] | null,
     newArea10r: number,
@@ -148,8 +155,8 @@ export default function Home() {
       farmer_name: formData.farmerName,
       phone: formData.phone,
       email: formData.email,
-      desired_start_date: formData.desiredStartDate,
-      desired_end_date: formData.desiredEndDate,
+      desired_start_date: formData.desiredStartDate?.trim() || undefined,
+      desired_end_date: formData.desiredEndDate?.trim() || undefined,
       field_polygon: polygon,
       area_10r: area10r,
       locked_price: lockedPrice,
@@ -321,7 +328,7 @@ export default function Home() {
 
         {/* 選択した案件: 地図 + 申込フォーム */}
         {user?.role === 'farmer' && selectedCampaign && (
-          <>
+          <div ref={applySectionRef} id="apply-section" className="scroll-mt-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
               <p className="text-dashboard-text font-bold text-sm">
                 申し込む案件: {(selectedCampaign as { campaign_title?: string }).campaign_title || selectedCampaign.location}
@@ -379,7 +386,7 @@ export default function Home() {
                 </Card>
               </section>
             </div>
-          </>
+          </div>
         )}
 
         <section id="applications" className="mb-8">
