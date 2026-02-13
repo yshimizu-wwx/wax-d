@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,8 @@ export interface WorkRequestFormProps {
   linkedProviders: LinkedProvider[];
   onSubmit: (data: WorkRequestData) => Promise<void>;
   onCancel?: () => void;
+  /** 紐付き業者一覧を再取得する（マイページで紐づけしたあとに呼ぶ） */
+  onRefetchRequested?: () => void;
 }
 
 export default function WorkRequestForm({
@@ -24,6 +27,7 @@ export default function WorkRequestForm({
   linkedProviders,
   onSubmit,
   onCancel,
+  onRefetchRequested,
 }: WorkRequestFormProps) {
   const [providerId, setProviderId] = useState('');
   const [location, setLocation] = useState('');
@@ -136,10 +140,48 @@ export default function WorkRequestForm({
   if (linkedProviders.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-4">
           <p className="text-dashboard-muted text-sm">
             依頼先の業者とまだ紐付けされていません。招待コードで業者と紐付けてから作業依頼を送信できます。
           </p>
+          <div className="rounded-xl border border-dashboard-border bg-dashboard-bg/50 p-4 text-sm">
+            <p className="font-medium text-dashboard-text mb-1">業者との紐づけ方法</p>
+            <ol className="list-decimal list-inside space-y-1 text-dashboard-muted">
+              <li>作業を依頼したい業者から<strong className="text-dashboard-text">招待コード</strong>を受け取る</li>
+              <li>
+                <Link href="/mypage" className="text-agrix-forest hover:underline font-medium">
+                  マイページ
+                </Link>
+                の「業者と紐づける」で招待コードを入力して紐づける
+              </li>
+              <li>紐づけが完了すると、この画面から依頼先として業者を選べるようになります</li>
+            </ol>
+            <p className="mt-3 text-dashboard-muted text-xs">
+              招待コードは業者の担当者にお問い合わせください。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/mypage"
+              className="inline-flex items-center justify-center rounded-lg border border-agrix-forest bg-transparent px-5 py-2 text-sm font-bold text-agrix-forest transition-colors hover:bg-agrix-forest/10 focus:outline-none focus:ring-2 focus:ring-agrix-forest"
+            >
+              マイページで招待コードを入力する
+            </Link>
+            {onRefetchRequested && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => onRefetchRequested()}
+              >
+                最新の状態を確認
+              </Button>
+            )}
+          </div>
+          {onRefetchRequested && (
+            <p className="text-xs text-dashboard-muted">
+              マイページで紐づけしたあとは「最新の状態を確認」を押すと、依頼先が表示されます。
+            </p>
+          )}
         </CardContent>
       </Card>
     );

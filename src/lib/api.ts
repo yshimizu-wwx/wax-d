@@ -121,18 +121,15 @@ export interface LinkedProvider {
   name: string;
 }
 
-/** 農家が紐付いている業者一覧（作業依頼で選択可能） */
-export async function fetchLinkedProvidersForFarmer(farmerId: string): Promise<LinkedProvider[]> {
-  const { data: links } = await supabase
-    .from('farmer_providers')
-    .select('provider_id')
-    .eq('farmer_id', farmerId)
-    .eq('status', 'active');
-  const ids = links?.map((l) => l.provider_id).filter(Boolean) ?? [];
-  if (ids.length === 0) return [];
-  const { data: users } = await supabase.from('users').select('id, name').in('id', ids);
-  const nameMap = new Map((users ?? []).map((u) => [u.id, u.name ?? u.id]));
-  return ids.map((id) => ({ id, name: nameMap.get(id) ?? '業者' }));
+/** 農家が紐付いている業者一覧（作業依頼で選択可能）。RPC で取得し RLS の影響を受けないようにする。 */
+export async function fetchLinkedProvidersForFarmer(_farmerId: string): Promise<LinkedProvider[]> {
+  const { data, error } = await supabase.rpc('get_linked_providers_for_current_farmer');
+  if (error) {
+    console.error('fetchLinkedProvidersForFarmer RPC error:', error);
+    return [];
+  }
+  const list = (data as Array<{ id: string; name: string }> | null) ?? [];
+  return list.map((p) => ({ id: p.id, name: p.name ?? '業者' }));
 }
 
 export async function createWorkRequest(

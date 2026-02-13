@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FileText, Send, Sprout } from 'lucide-react';
@@ -41,11 +41,23 @@ export default function RequestsPage() {
     });
   }, []);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (!user || user.role !== 'farmer') return;
     fetchWorkRequestsByFarmer(user.id).then(setRequests);
     fetchFieldsByFarmer(user.id).then(setFields);
     fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+  }, [user]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // 他タブで紐づけしたあとこのタブに戻ったときに再取得する
+  useEffect(() => {
+    if (!user || user.role !== 'farmer') return;
+    const onFocus = () => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [user]);
 
   useEffect(() => {
@@ -119,6 +131,7 @@ export default function RequestsPage() {
               fields={fields}
               linkedProviders={linkedProviders}
               onSubmit={handleSubmit}
+              onRefetchRequested={() => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders)}
             />
           )}
         </section>

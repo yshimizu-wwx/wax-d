@@ -130,6 +130,28 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
 }
 
 /**
+ * 招待コードで業者と紐づける（農家のみ）。RPC link_farmer_by_invitation_code を呼び出す。
+ */
+export async function linkFarmerByInvitationCode(invitationCode: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { data, error } = await supabase.rpc('link_farmer_by_invitation_code', {
+            p_invitation_code: invitationCode.trim(),
+        });
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        const result = data as { success: boolean; error?: string } | null;
+        if (!result) {
+            return { success: false, error: '処理に失敗しました' };
+        }
+        return { success: result.success, error: result.error };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        return { success: false, error: msg };
+    }
+}
+
+/**
  * Generate or get invitation code for a provider
  */
 export async function getInvitationCode(providerId: string): Promise<string | null> {
