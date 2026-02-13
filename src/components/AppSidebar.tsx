@@ -62,7 +62,7 @@ export default function AppSidebar({ user, className }: AppSidebarProps) {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col w-64 shrink-0 bg-agrix-forest border-r border-white/10",
+        "hidden md:flex flex-col w-64 shrink-0 bg-slate-900/50 backdrop-blur-xl border-r border-white/10",
         className
       )}
     >
@@ -77,10 +77,10 @@ export default function AppSidebar({ user, className }: AppSidebarProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition-colors",
+                "flex items-center gap-3 rounded-xl pl-3 pr-3 py-3 text-sm font-bold transition-colors border-l-4",
                 isActive
-                  ? "bg-white/20 text-white shadow-inner"
-                  : "text-white/90 hover:bg-white/10 hover:text-white"
+                  ? "border-l-cyan-400 text-cyan-400 bg-white/5"
+                  : "border-l-transparent text-slate-400 hover:text-white hover:bg-white/5"
               )}
             >
               <Icon className="h-5 w-5 shrink-0" />

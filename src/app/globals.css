@@ -46,12 +46,13 @@
   --ring: 217 91% 60%;
 }
 
+/* Dark Tech Aesthetics — 深いスレートネイビー */
 .dashboard-app {
-  --dashboard-bg: #09090b;
-  --dashboard-card: #18181b;
-  --dashboard-text: #fafafa;
-  --dashboard-muted: #a1a1aa;
-  --dashboard-border: #27272a;
+  --dashboard-bg: #0B0F19;
+  --dashboard-card: #0f172a;
+  --dashboard-text: #f8fafc;
+  --dashboard-muted: #94a3b8;
+  --dashboard-border: #1e293b;
 }
 
 .auth-theme {
@@ -67,6 +68,14 @@ body {
   color: hsl(var(--foreground));
   font-family: var(--font-inter), Inter, sans-serif;
   letter-spacing: -0.025em;
+}
+
+/* ダッシュボード内のヘッダー・タイトルは幾何学的サンセリフで統一 */
+.dashboard-app h1,
+.dashboard-app h2,
+.dashboard-app h3,
+.dashboard-app .font-heading {
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
 }
 
 @layer base {

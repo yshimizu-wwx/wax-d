@@ -15,13 +15,13 @@ const tokens = {
   "accent-foreground": "#fafafa",
 };
 
-/** Dashboard / app chrome uses same dark palette (semantic alias) */
+/** Dashboard: Dark Tech Aesthetics — 深いスレートネイビー */
 const dashboardColors = {
-  bg: tokens.background,
-  card: tokens.card,
-  text: tokens.foreground,
-  muted: tokens["muted-foreground"],
-  border: tokens.border,
+  bg: "#0B0F19",
+  card: "#0f172a",
+  text: "#f8fafc",
+  muted: "#94a3b8",
+  border: "#1e293b",
 };
 
 export default {
