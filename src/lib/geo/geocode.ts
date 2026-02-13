@@ -39,20 +39,32 @@ function normalizeQueryForJapan(q: string): string {
  * 見つからない場合は null。
  * Google API キーがあれば Google を優先（日本向け region=jp）。なければ Nominatim。
  */
+/** 番地の区切りを ASCII ハイフンに統一（例: 2307ー3 → 2307-3）。ジオコーダのヒット率向上のため */
+function normalizeAddressHyphens(s: string): string {
+  return s.replace(/(\d)\s*[－ー]\s*(\d)/g, '$1-$2');
+}
+
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
   const trimmed = address?.trim();
   if (!trimmed) return null;
 
+  const normalized = normalizeAddressHyphens(trimmed);
+
+  // #region agent log
+  const hasGoogle = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'geocode.ts', message: 'geocodeAddress backend', data: { hasGoogle }, timestamp: Date.now(), hypothesisId: 'H5_backend' }) }).catch(() => {});
+  // #endregion
+
   if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     try {
-      const googleResult = await geocodeWithGoogle(trimmed);
+      const googleResult = await geocodeWithGoogle(normalized);
       if (googleResult) return { lat: googleResult.lat, lng: googleResult.lng, displayName: googleResult.displayName };
     } catch {
       /* フォールバックで Nominatim を試す */
     }
   }
 
-  const query = normalizeQueryForJapan(trimmed);
+  const query = normalizeQueryForJapan(normalized);
   const params = new URLSearchParams({
     q: query,
     format: 'json',
@@ -61,6 +73,10 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
   });
   // 日本国内に限定して検索精度を上げる
   params.set('countrycodes', 'jp');
+
+  // #region agent log
+  fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'geocode.ts', message: 'Nominatim first attempt', data: { queryLength: query.length }, timestamp: Date.now(), hypothesisId: 'H7_nominatim' }) }).catch(() => {});
+  // #endregion
 
   const doRequest = async (): Promise<GeocodeResult | null> => {
     const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
@@ -85,15 +101,18 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
   };
 
   let result = await doRequest();
+  // #region agent log
+  fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'geocode.ts', message: 'Nominatim first result', data: { hasResult: !!result }, timestamp: Date.now(), hypothesisId: 'H7_nominatim' }) }).catch(() => {});
+  // #endregion
   // 補正クエリでヒットしなかった場合、元の文字列のみで再試行（countrycodes=jp は維持）
-  if (!result && query !== trimmed) {
-    params.set('q', trimmed);
+  if (!result && query !== normalized) {
+    params.set('q', normalized);
     await new Promise((r) => setTimeout(r, 1100)); // Nominatim 1req/sec を考慮
     result = await doRequest();
   }
   // まだヒットしない場合：番地を除いた地域名で再検索
-  if (!result && isLikelyJapaneseAddress(trimmed)) {
-    const withoutNumber = trimmed.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
+  if (!result && isLikelyJapaneseAddress(normalized)) {
+    const withoutNumber = normalized.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
     if (withoutNumber && withoutNumber.length >= 2) {
       params.set('q', normalizeQueryForJapan(withoutNumber));
       await new Promise((r) => setTimeout(r, 1100));
@@ -101,18 +120,29 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
     }
   }
   // 利根郡は群馬県なので、県名を付けて再試行
-  if (!result && /^利根郡/.test(trimmed)) {
-    params.set('q', normalizeQueryForJapan(`群馬県${trimmed}`));
+  if (!result && /^利根郡/.test(normalized)) {
+    params.set('q', normalizeQueryForJapan(`群馬県${normalized}`));
     await new Promise((r) => setTimeout(r, 1100));
     result = await doRequest();
     if (!result) {
-      const withoutNumber = trimmed.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
+      const withoutNumber = normalized.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
       if (withoutNumber.length >= 2) {
         params.set('q', normalizeQueryForJapan(`群馬県${withoutNumber}`));
         await new Promise((r) => setTimeout(r, 1100));
         result = await doRequest();
       }
     }
+  }
+  // 最後の手段: 地域名のみで検索（例: 月夜野・みなかみ町の中心付近）
+  if (!result && /月夜野/.test(normalized)) {
+    params.set('q', '月夜野, 群馬県, Japan');
+    await new Promise((r) => setTimeout(r, 1100));
+    result = await doRequest();
+  }
+  if (!result && /みなかみ/.test(normalized)) {
+    params.set('q', 'みなかみ町, 群馬県, Japan');
+    await new Promise((r) => setTimeout(r, 1100));
+    result = await doRequest();
   }
   return result;
 }

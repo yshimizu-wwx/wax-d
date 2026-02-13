@@ -340,6 +340,16 @@ export default function CampaignCreatePage() {
                             <PolygonMap
                                 onPolygonComplete={handlePolygonComplete}
                                 initialPolygon={coords || undefined}
+                                initialCenter={
+                                    user && user.lat != null && user.lng != null
+                                        ? [user.lat, user.lng]
+                                        : undefined
+                                }
+                                initialAddress={
+                                    user && (user.lat == null || user.lng == null) && user.address
+                                        ? user.address
+                                        : undefined
+                                }
                                 showAddressSearch
                             />
                         </div>

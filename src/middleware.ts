@@ -59,12 +59,23 @@ export async function middleware(req: NextRequest) {
         data: { session },
     } = await supabase.auth.getSession();
 
+    // #region agent log
+    if (req.nextUrl.pathname.startsWith('/api')) {
+        fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'middleware.ts', message: 'api request', data: { pathname: req.nextUrl.pathname, hasSession: !!session }, timestamp: Date.now(), hypothesisId: 'H1_middleware' }) }).catch(() => {});
+    }
+    // #endregion
+
     // Public routes that don't require authentication
     const publicRoutes = ['/login', '/auth/callback', '/auth/verified', '/auth/pending-approval'];
     const isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname.startsWith(route));
 
     if (!session) {
         if (isPublicRoute) return res;
+        // #region agent log
+        if (req.nextUrl.pathname.startsWith('/api')) {
+            fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'middleware.ts', message: 'redirect to login (no session)', data: { pathname: req.nextUrl.pathname }, timestamp: Date.now(), hypothesisId: 'H1_middleware' }) }).catch(() => {});
+        }
+        // #endregion
         return NextResponse.redirect(new URL('/login', req.url));
     }
 

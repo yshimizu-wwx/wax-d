@@ -15,6 +15,9 @@ import {
   UserCheck,
   Send,
   MapPin,
+  FolderKanban,
+  ListTodo,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { User } from "@/lib/auth";
@@ -36,12 +39,10 @@ function getNavItems(role: string): NavItem[] {
     items.push({ href: "/my-fields", label: "My畑", icon: Sprout });
   }
   if (role === "provider") {
-    items.push({ href: "/admin/campaigns/new", label: "案件作成", icon: PlusCircle });
-    items.push({ href: "/provider/calendar", label: "カレンダー", icon: Calendar });
-    items.push({ href: "/provider/reports/new", label: "実績報告", icon: FileText });
-    items.push({ href: "/provider/billings", label: "請求管理", icon: Receipt });
-    items.push({ href: "/admin/masters", label: "マスタ", icon: Package });
-    items.push({ href: "/admin/users", label: "紐付き農家", icon: Building2 });
+    items.push({ href: "/provider/projects", label: "案件", icon: FolderKanban });
+    items.push({ href: "/provider/tasks", label: "作業", icon: ListTodo });
+    items.push({ href: "/provider/billings", label: "請求", icon: Receipt });
+    items.push({ href: "/provider/settings", label: "設定", icon: Settings });
   }
   if (role === "admin") {
     items.push({ href: "/admin/users", label: "ユーザー承認", icon: UserCheck });

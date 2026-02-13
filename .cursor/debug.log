@@ -1,0 +1,34 @@
+{"location":"middleware.ts","message":"api request","data":{"pathname":"/api/geocode","hasSession":true},"timestamp":1770944276764,"hypothesisId":"H1_middleware"}
+{"location":"api/geocode/route.ts","message":"before geocodeAddress","data":{"addressLength":17},"timestamp":1770944277158,"hypothesisId":"H3_params"}
+{"location":"geocode.ts","message":"geocodeAddress backend","data":{"hasGoogle":true},"timestamp":1770944277159,"hypothesisId":"H5_backend"}
+{"location":"api/geocode/route.ts","message":"GET handler entered","data":{"pathname":"/api/geocode"},"timestamp":1770944277158,"hypothesisId":"H2_route_hit"}
+{"location":"google-maps.ts","message":"Google geocode response","data":{"status":"REQUEST_DENIED","resultsCount":0},"timestamp":1770944277264,"hypothesisId":"H6_google_response"}
+{"location":"geocode.ts","message":"Nominatim first attempt","data":{"queryLength":24},"timestamp":1770944277265,"hypothesisId":"H7_nominatim"}
+{"location":"geocode.ts","message":"Nominatim first result","data":{"hasResult":false},"timestamp":1770944277322,"hypothesisId":"H7_nominatim"}
+{"location":"api/geocode/route.ts","message":"after geocodeAddress","data":{"hasResult":true},"timestamp":1770944283782,"hypothesisId":"H3_geocode_result"}
+{"location":"middleware.ts","message":"api request","data":{"pathname":"/api/geocode","hasSession":true},"timestamp":1770944290465,"hypothesisId":"H1_middleware"}
+{"location":"api/geocode/route.ts","message":"before geocodeAddress","data":{"addressLength":17},"timestamp":1770944290587,"hypothesisId":"H3_params"}
+{"location":"geocode.ts","message":"geocodeAddress backend","data":{"hasGoogle":true},"timestamp":1770944290587,"hypothesisId":"H5_backend"}
+{"location":"api/geocode/route.ts","message":"GET handler entered","data":{"pathname":"/api/geocode"},"timestamp":1770944290587,"hypothesisId":"H2_route_hit"}
+{"location":"google-maps.ts","message":"Google geocode response","data":{"status":"REQUEST_DENIED","resultsCount":0},"timestamp":1770944290666,"hypothesisId":"H6_google_response"}
+{"location":"geocode.ts","message":"Nominatim first attempt","data":{"queryLength":24},"timestamp":1770944290666,"hypothesisId":"H7_nominatim"}
+{"location":"geocode.ts","message":"Nominatim first result","data":{"hasResult":false},"timestamp":1770944290704,"hypothesisId":"H7_nominatim"}
+{"location":"api/geocode/route.ts","message":"after geocodeAddress","data":{"hasResult":true},"timestamp":1770944296305,"hypothesisId":"H3_geocode_result"}
+{"location":"middleware.ts","message":"api request","data":{"pathname":"/api/geocode","hasSession":true},"timestamp":1770944366646,"hypothesisId":"H1_middleware"}
+{"location":"api/geocode/route.ts","message":"before geocodeAddress","data":{"addressLength":23},"timestamp":1770944366932,"hypothesisId":"H3_params"}
+{"location":"geocode.ts","message":"geocodeAddress backend","data":{"hasGoogle":true},"timestamp":1770944366932,"hypothesisId":"H5_backend"}
+{"location":"api/geocode/route.ts","message":"GET handler entered","data":{"pathname":"/api/geocode"},"timestamp":1770944366931,"hypothesisId":"H2_route_hit"}
+{"location":"google-maps.ts","message":"Google geocode response","data":{"status":"REQUEST_DENIED","resultsCount":0},"timestamp":1770944367013,"hypothesisId":"H6_google_response"}
+{"location":"geocode.ts","message":"Nominatim first attempt","data":{"queryLength":30},"timestamp":1770944367014,"hypothesisId":"H7_nominatim"}
+{"location":"geocode.ts","message":"Nominatim first result","data":{"hasResult":false},"timestamp":1770944367474,"hypothesisId":"H7_nominatim"}
+{"location":"api/geocode/route.ts","message":"after geocodeAddress","data":{"hasResult":true},"timestamp":1770944371610,"hypothesisId":"H3_geocode_result"}
+{"location":"middleware.ts","message":"api request","data":{"pathname":"/api/geocode","hasSession":true},"timestamp":1770944390628,"hypothesisId":"H1_middleware"}
+{"location":"api/geocode/route.ts","message":"before geocodeAddress","data":{"addressLength":23},"timestamp":1770944390712,"hypothesisId":"H3_params"}
+{"location":"geocode.ts","message":"geocodeAddress backend","data":{"hasGoogle":true},"timestamp":1770944390713,"hypothesisId":"H5_backend"}
+{"location":"api/geocode/route.ts","message":"GET handler entered","data":{"pathname":"/api/geocode"},"timestamp":1770944390712,"hypothesisId":"H2_route_hit"}
+{"location":"google-maps.ts","message":"Google geocode response","data":{"status":"REQUEST_DENIED","resultsCount":0},"timestamp":1770944390805,"hypothesisId":"H6_google_response"}
+{"location":"geocode.ts","message":"Nominatim first attempt","data":{"queryLength":30},"timestamp":1770944390805,"hypothesisId":"H7_nominatim"}
+{"location":"geocode.ts","message":"Nominatim first result","data":{"hasResult":false},"timestamp":1770944390874,"hypothesisId":"H7_nominatim"}
+{"location":"api/geocode/route.ts","message":"after geocodeAddress","data":{"hasResult":true},"timestamp":1770944394246,"hypothesisId":"H3_geocode_result"}
+{"location":"api/geocode/route.ts","message":"GET handler entered","data":{"pathname":"/api/geocode"},"timestamp":1770944587547,"hypothesisId":"H2_route_hit"}
+{"location":"api/geocode/route.ts","message":"GET handler entered","data":{"pathname":"/api/geocode"},"timestamp":1770945078505,"hypothesisId":"H2_route_hit"}

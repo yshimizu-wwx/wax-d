@@ -406,15 +406,54 @@ export default function AdminDashboardPage() {
           <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">メニュー</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
             <Link
-              href="/admin/campaigns/new"
+              href="/provider/projects"
               className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
             >
               <div className="p-3 rounded-xl bg-agrix-forest/10">
                 <PlusCircle className="w-6 h-6 text-agrix-forest" />
               </div>
               <div>
-                <p className="font-bold text-dashboard-text">案件を作成</p>
-                <p className="text-sm text-dashboard-muted">新規募集を開始</p>
+                <p className="font-bold text-dashboard-text">案件</p>
+                <p className="text-sm text-dashboard-muted">作成・募集・締切・確定</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
+            </Link>
+            <Link
+              href="/provider/tasks"
+              className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
+            >
+              <div className="p-3 rounded-xl bg-agrix-forest/10">
+                <Calendar className="w-6 h-6 text-agrix-forest" />
+              </div>
+              <div>
+                <p className="font-bold text-dashboard-text">作業</p>
+                <p className="text-sm text-dashboard-muted">予定・完了・実績報告</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
+            </Link>
+            <Link
+              href="/provider/billings"
+              className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
+            >
+              <div className="p-3 rounded-xl bg-agrix-gold/20">
+                <FileText className="w-6 h-6 text-agrix-gold" />
+              </div>
+              <div>
+                <p className="font-bold text-dashboard-text">請求</p>
+                <p className="text-sm text-dashboard-muted">請求管理・印刷</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
+            </Link>
+            <Link
+              href="/provider/settings"
+              className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
+            >
+              <div className="p-3 rounded-xl bg-dashboard-muted/20">
+                <Package className="w-6 h-6 text-agrix-slate" />
+              </div>
+              <div>
+                <p className="font-bold text-dashboard-text">設定</p>
+                <p className="text-sm text-dashboard-muted">農家・マスタ・自社情報</p>
               </div>
               <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
             </Link>
@@ -423,50 +462,11 @@ export default function AdminDashboardPage() {
               className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
             >
               <div className="p-3 rounded-xl bg-agrix-forest/10">
-                <Calendar className="w-6 h-6 text-agrix-forest" />
+                <CalendarRange className="w-6 h-6 text-agrix-forest" />
               </div>
               <div>
-                <p className="font-bold text-dashboard-text">作業カレンダー</p>
-                <p className="text-sm text-dashboard-muted">予定の確認・管理</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
-            </Link>
-            <Link
-              href="/admin/masters"
-              className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
-            >
-              <div className="p-3 rounded-xl bg-dashboard-muted/20">
-                <Package className="w-6 h-6 text-agrix-slate" />
-              </div>
-              <div>
-                <p className="font-bold text-dashboard-text">マスタ管理</p>
-                <p className="text-sm text-dashboard-muted">品目・作業種別・農薬</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
-            </Link>
-            <Link
-              href="/admin/users"
-              className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
-            >
-              <div className="p-3 rounded-xl bg-agrix-gold/20">
-                <Building2 className="w-6 h-6 text-agrix-gold" />
-              </div>
-              <div>
-                <p className="font-bold text-dashboard-text">紐付き農家一覧</p>
-                <p className="text-sm text-dashboard-muted">自分に紐付いている農家</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
-            </Link>
-            <Link
-              href="/provider/reports/new"
-              className="flex items-center gap-4 p-4 rounded-2xl border border-dashboard-border bg-dashboard-card shadow-sm hover:shadow-md hover:border-agrix-forest/30 transition-all"
-            >
-              <div className="p-3 rounded-xl bg-agrix-gold/20">
-                <FileText className="w-6 h-6 text-agrix-gold" />
-              </div>
-              <div>
-                <p className="font-bold text-dashboard-text">実績報告</p>
-                <p className="text-sm text-dashboard-muted">作業完了の報告</p>
+                <p className="font-bold text-dashboard-text">カレンダー</p>
+                <p className="text-sm text-dashboard-muted">予定の確認</p>
               </div>
               <ArrowRight className="w-5 h-5 text-dashboard-muted ml-auto" />
             </Link>

@@ -16,6 +16,11 @@ function isLikelyJapaneseAddress(q: string): boolean {
   return /[一-龥ぁ-んァ-ン]/.test(q) || /県|府|都|道|郡|町|村|市|区/.test(q);
 }
 
+/** 番地の区切りを ASCII ハイフンに統一（2307ー3 → 2307-3）。呼び出し元で未適用の場合に備える */
+function normalizeAddressHyphens(s: string): string {
+  return s.replace(/(\d)\s*[－ー]\s*(\d)/g, '$1-$2');
+}
+
 /** 末尾の番地（数字・ハイフン）を除いた地域名を返す */
 function stripBanchi(addr: string): string {
   return addr.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
@@ -45,6 +50,8 @@ export async function geocodeWithGoogle(address: string): Promise<GeocodeResult 
   const trimmed = address?.trim();
   if (!trimmed) return null;
 
+  const normalized = normalizeAddressHyphens(trimmed);
+
   const tryRequest = async (addr: string): Promise<GeocodeResult | null> => {
     try {
       const params = new URLSearchParams({
@@ -56,34 +63,46 @@ export async function geocodeWithGoogle(address: string): Promise<GeocodeResult 
       const res = await fetch(`${GEOCODE_URL}?${params.toString()}`);
       if (!res.ok) return null;
       const data = await res.json();
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'google-maps.ts', message: 'Google geocode response', data: { status: data?.status, resultsCount: data?.results?.length ?? 0 }, timestamp: Date.now(), hypothesisId: 'H6_google_response' }) }).catch(() => {});
+      // #endregion
+      if (data?.status === 'REQUEST_DENIED') {
+        throw new Error('GOOGLE_REQUEST_DENIED');
+      }
       return parseGoogleGeocodeResponse(data);
-    } catch {
+    } catch (e) {
+      if ((e as Error)?.message === 'GOOGLE_REQUEST_DENIED') throw e;
       return null;
     }
   };
 
-  let result = await tryRequest(trimmed);
+  try {
+    let result = await tryRequest(normalized);
 
-  if (!result && isLikelyJapaneseAddress(trimmed) && !/日本|Japan/i.test(trimmed)) {
-    result = await tryRequest(`${trimmed}, 日本`);
-  }
+    if (!result && isLikelyJapaneseAddress(normalized) && !/日本|Japan/i.test(normalized)) {
+      result = await tryRequest(`${normalized}, 日本`);
+    }
 
-  if (!result && /^利根郡/.test(trimmed)) {
-    result = await tryRequest(`群馬県${trimmed}`);
-    if (!result) result = await tryRequest(`群馬県${trimmed}, 日本`);
-  }
+    if (!result && /^利根郡/.test(normalized)) {
+      result = await tryRequest(`群馬県${normalized}`);
+      if (!result) result = await tryRequest(`群馬県${normalized}, 日本`);
+    }
 
-  if (!result) {
-    const withoutBanchi = stripBanchi(trimmed);
-    if (withoutBanchi.length >= 2 && withoutBanchi !== trimmed) {
-      result = await tryRequest(withoutBanchi);
-      if (!result && !/日本|Japan/i.test(withoutBanchi)) {
-        result = await tryRequest(`${withoutBanchi}, 日本`);
+    if (!result) {
+      const withoutBanchi = stripBanchi(normalized);
+      if (withoutBanchi.length >= 2 && withoutBanchi !== normalized) {
+        result = await tryRequest(withoutBanchi);
+        if (!result && !/日本|Japan/i.test(withoutBanchi)) {
+          result = await tryRequest(`${withoutBanchi}, 日本`);
+        }
       }
     }
-  }
 
-  return result;
+    return result;
+  } catch (e) {
+    if ((e as Error)?.message === 'GOOGLE_REQUEST_DENIED') return null;
+    throw e;
+  }
 }
 
 /**
