@@ -37,6 +37,8 @@ interface PolygonMapProps {
     initialAddress?: string | null;
     /** 住所検索バーを表示し、検索で地図を移動できるようにする */
     showAddressSearch?: boolean;
+    /** 住所検索（地図を移動）成功時に、取得した住所・座標を親に渡す */
+    onAddressSearchResult?: (address: string | undefined, lat: number, lng: number) => void;
 }
 
 interface MapControllerProps extends PolygonMapProps {
@@ -189,6 +191,8 @@ export default function PolygonMap(props: PolygonMapProps) {
                 setFlyToTarget([result.lat, result.lng]);
                 setIsFlying(true);
                 setTimeout(() => setIsFlying(false), 600);
+                // 検索結果の住所・座標を親に渡し、フォームの「住所・場所」に同期
+                props.onAddressSearchResult?.(result.displayName ?? q, result.lat, result.lng);
             } else {
                 setSearchError('住所が見つかりませんでした。別のキーワードで試してください。');
             }
@@ -197,7 +201,7 @@ export default function PolygonMap(props: PolygonMapProps) {
         } finally {
             setSearchLoading(false);
         }
-    }, [addressQuery, clearGeoError]);
+    }, [addressQuery, clearGeoError, props.onAddressSearchResult]);
 
     const handleCurrentLocation = useCallback(async () => {
         setSearchError(null);

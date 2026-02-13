@@ -147,9 +147,35 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
   return result;
 }
 
+const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+const NOMINATIM_USER_AGENT = 'WayfinderAgriX/1.0 (Agricultural field mapping)';
+
+/** Nominatim で逆ジオコード（緯度経度 → 住所） */
+async function reverseGeocodeWithNominatim(lat: number, lng: number): Promise<GeocodeResult | null> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lng),
+    format: 'json',
+  });
+  const res = await fetch(`${NOMINATIM_REVERSE_URL}?${params.toString()}`, {
+    headers: { 'User-Agent': NOMINATIM_USER_AGENT },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { lat?: string; lon?: string; display_name?: string };
+  const latNum = parseFloat(String(data?.lat ?? ''));
+  const lngNum = parseFloat(String(data?.lon ?? ''));
+  if (Number.isNaN(latNum) || Number.isNaN(lngNum)) return null;
+  return {
+    lat: latNum,
+    lng: lngNum,
+    displayName: data?.display_name ?? undefined,
+  };
+}
+
 /**
  * 緯度・経度から住所を取得（逆ジオコーディング）
- * サーバー側で Google を使用（キー設定時）。クライアントは /api/geocode?lat=&lng= 経由で利用
+ * サーバー側で Google を使用（キー設定時）、未設定時は Nominatim でフォールバック。
+ * クライアントは /api/geocode?lat=&lng= 経由で利用
  */
 export async function reverseGeocodeAddress(lat: number, lng: number): Promise<GeocodeResult | null> {
   if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) return null;
@@ -157,10 +183,16 @@ export async function reverseGeocodeAddress(lat: number, lng: number): Promise<G
   if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     try {
       const { reverseGeocodeWithGoogle } = await import('@/lib/google-maps');
-      return reverseGeocodeWithGoogle(lat, lng);
+      const result = await reverseGeocodeWithGoogle(lat, lng);
+      if (result) return result;
     } catch {
-      /* フォールバックなし（Nominatim 逆ジオコードは別実装可） */
+      /* フォールバックで Nominatim を試す */
     }
   }
-  return null;
+
+  try {
+    return await reverseGeocodeWithNominatim(lat, lng);
+  } catch {
+    return null;
+  }
 }

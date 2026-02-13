@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -13,41 +13,72 @@ import {
   UserCheck,
   Building2,
   Landmark,
-  CircleDollarSign,
   CalendarRange,
-  Link2,
-  Copy,
+  FolderKanban,
+  ListTodo,
+  Receipt,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import AppLoader from '@/components/AppLoader';
 import { getCurrentUser, type User } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { closeCampaign, fetchCampaignTotalArea } from '@/lib/api';
-import { calculateCurrentUnitPrice } from '@/lib/calculator/priceCalculator';
+import { closeCampaign } from '@/lib/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  getReportDeadlineAlert,
+  getRecruitmentDeadlineAlert,
+} from '@/lib/statusHelper';
+import { cn } from '@/lib/utils';
 
-interface UpcomingWork {
+/** 集客セクション用: 募集中の案件＋応募状況 */
+interface RecruitmentItem {
   id: string;
-  campaign_title: string;
+  campaign_title: string | null;
   location: string;
-  confirmed_date: string;
-  final_date: string;
-  booking_count: number;
   status: string;
-  is_closed: boolean;
+  final_date: string | null;
+  end_date: string | null;
+  start_date: string | null;
+  is_closed: boolean | null;
+  application_count: number;
+  total_area_10r: number;
+}
+
+/** 作業・報告セクション用: 未報告の予約（作業日確定済み） */
+interface OperationItem {
+  id: string;
+  campaign_id: string;
+  campaign_title: string | null;
+  location: string;
+  farmer_name: string | null;
+  area_10r: number;
+  work_status: string | null;
+  confirmed_date: string | null;
+}
+
+/** 請求・完了セクション用: 報告済み案件の請求状況 */
+interface BillingItem {
+  campaign_id: string;
+  campaign_title: string | null;
+  location: string | null;
+  completed_count: number;
+  total_amount: number;
+  invoice_status: 'unbilled' | 'sent' | 'processed' | 'invoiced';
+  has_unbilled: boolean;
 }
 
 export default function AdminDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
-  const [upcomingWork, setUpcomingWork] = useState<UpcomingWork[]>([]);
   const [openCampaignsCount, setOpenCampaignsCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [providerKpi, setProviderKpi] = useState<{ totalArea10r: number; currentUnitPrice: number | null }>({ totalArea10r: 0, currentUnitPrice: null });
-  const [kpiTotalArea, setKpiTotalArea] = useState<number>(0);
-  const [kpiCurrentUnitPrice, setKpiCurrentUnitPrice] = useState<number | null>(null);
+  const [recruitmentList, setRecruitmentList] = useState<RecruitmentItem[]>([]);
+  const [operationList, setOperationList] = useState<OperationItem[]>([]);
+  const [billingList, setBillingList] = useState<BillingItem[]>([]);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -73,72 +104,159 @@ export default function AdminDashboardPage() {
     }
 
     if (user.role === 'provider') {
-      supabase
-        .from('campaigns')
-        .select('id, campaign_title, location, final_date, status, is_closed, base_price, min_price, target_area_10r, min_target_area_10r, max_target_area_10r, execution_price')
-        .eq('provider_id', user.id)
-        .in('status', ['open', 'closed', 'applied'])
-        .order('start_date', { ascending: true })
-        .limit(10)
-        .then(({ data: projs }) => {
-          if (!projs?.length) {
-            setUpcomingWork([]);
-            setProviderKpi({ totalArea10r: 0, currentUnitPrice: null });
-            return;
-          }
-          const ids = projs.map((p) => p.id);
-          Promise.all([
-            supabase.from('bookings').select('campaign_id, confirmed_date, area_10r').in('campaign_id', ids).neq('status', 'canceled'),
-            ...ids.map((id) => fetchCampaignTotalArea(id)),
-          ]).then(([bookingsRes, ...totals]) => {
-            const bookings = ((bookingsRes as { data: unknown[] }).data || []) as Array<{ campaign_id: string; confirmed_date?: string; area_10r?: number }>;
-            const byCampaign = new Map<string, { confirmed_date: string; count: number }>();
-            bookings.forEach((b) => {
-              const key = b.campaign_id;
-              const prev = byCampaign.get(key) || { confirmed_date: '', count: 0 };
-              prev.count += 1;
-              if (b.confirmed_date) prev.confirmed_date = b.confirmed_date;
-              byCampaign.set(key, prev);
-            });
-            const list: UpcomingWork[] = projs.map((p) => {
-              const info = byCampaign.get(p.id) || { confirmed_date: '', count: 0 };
-              return {
-                id: p.id,
-                campaign_title: (p as any).campaign_title || p.location || '案件',
-                location: (p as any).location || '',
-                confirmed_date: info.confirmed_date,
-                final_date: (p as any).final_date || '',
-                booking_count: info.count,
-                status: (p as any).status ?? '',
-                is_closed: (p as any).is_closed ?? false,
-              };
-            });
-            setUpcomingWork(list.slice(0, 5));
+      (async () => {
+        const { data: campaigns } = await supabase
+          .from('campaigns')
+          .select('id, campaign_title, location, final_date, start_date, end_date, status, is_closed')
+          .eq('provider_id', user.id)
+          .in('status', ['open', 'applied', 'closed', 'completed', 'archived'])
+          .order('start_date', { ascending: true });
 
-            const totalArea10r = (totals as number[]).reduce((a, b) => a + b, 0);
-            const openProj = projs.find((p) => !p.is_closed && (p.status === 'open' || p.status === 'applied'));
-            let currentUnitPrice: number | null = null;
-            if (openProj && openProj.id) {
-              const idx = ids.indexOf(openProj.id);
-              const total = idx >= 0 ? (totals as number[])[idx] ?? 0 : 0;
-              const res = calculateCurrentUnitPrice(
-                {
-                  base_price: openProj.base_price || 0,
-                  min_price: openProj.min_price || 0,
-                  target_area_10r: openProj.target_area_10r || 0,
-                  min_target_area_10r: openProj.min_target_area_10r ?? undefined,
-                  max_target_area_10r: openProj.max_target_area_10r ?? undefined,
-                  execution_price: openProj.execution_price ?? undefined,
-                },
-                total
-              );
-              currentUnitPrice = res.currentPrice;
-            }
-            setProviderKpi({ totalArea10r, currentUnitPrice });
+        const list = (campaigns ?? []) as Array<{
+          id: string;
+          campaign_title: string | null;
+          location: string;
+          final_date: string | null;
+          start_date: string | null;
+          end_date: string | null;
+          status: string;
+          is_closed: boolean | null;
+        }>;
+        if (list.length === 0) {
+          setRecruitmentList([]);
+          setOperationList([]);
+          setBillingList([]);
+          return;
+        }
+        const campaignIds = list.map((c) => c.id);
+        const { data: bookings } = await supabase
+          .from('bookings')
+          .select('id, campaign_id, farmer_id, farmer_name, area_10r, work_status, confirmed_date, final_amount, invoice_status')
+          .in('campaign_id', campaignIds)
+          .neq('status', 'canceled');
+
+        const bookingsList = (bookings ?? []) as Array<{
+          id: string;
+          campaign_id: string;
+          farmer_name: string | null;
+          area_10r: number;
+          work_status: string | null;
+          confirmed_date: string | null;
+          final_amount: number | null;
+          invoice_status: string | null;
+        }>;
+        const campaignMap = new Map(list.map((c) => [c.id, c]));
+
+        const recruitment: RecruitmentItem[] = list
+          .filter((c) => c.status === 'open' || c.status === 'applied')
+          .map((c) => {
+            const forCampaign = bookingsList.filter((b) => b.campaign_id === c.id);
+            return {
+              id: c.id,
+              campaign_title: c.campaign_title,
+              location: c.location,
+              status: c.status,
+              final_date: c.final_date,
+              end_date: c.end_date,
+              start_date: c.start_date,
+              is_closed: c.is_closed,
+              application_count: forCampaign.length,
+              total_area_10r: forCampaign.reduce((s, b) => s + (Number(b.area_10r) || 0), 0),
+            };
           });
-        });
+
+        const closedCampaignIds = new Set(
+          list.filter((c) => ['closed', 'completed', 'archived'].includes(c.status)).map((c) => c.id)
+        );
+        const operation: OperationItem[] = bookingsList
+          .filter((b) => b.work_status !== 'completed' && closedCampaignIds.has(b.campaign_id))
+          .map((b) => {
+            const camp = campaignMap.get(b.campaign_id);
+            return {
+              id: b.id,
+              campaign_id: b.campaign_id,
+              campaign_title: camp?.campaign_title ?? null,
+              location: camp?.location ?? '',
+              farmer_name: b.farmer_name,
+              area_10r: b.area_10r,
+              work_status: b.work_status,
+              confirmed_date: b.confirmed_date,
+            };
+          });
+
+        const completedByCampaign = new Map<
+          string,
+          { count: number; total: number; unbilled: number; statuses: Set<string> }
+        >();
+        bookingsList
+          .filter((b) => b.work_status === 'completed')
+          .forEach((b) => {
+            const prev = completedByCampaign.get(b.campaign_id) ?? {
+              count: 0,
+              total: 0,
+              unbilled: 0,
+              statuses: new Set<string>(),
+            };
+            prev.count += 1;
+            prev.total += Number(b.final_amount) || 0;
+            if (b.invoice_status === 'unbilled') prev.unbilled += 1;
+            if (b.invoice_status) prev.statuses.add(b.invoice_status);
+            completedByCampaign.set(b.campaign_id, prev);
+          });
+        const billing: BillingItem[] = Array.from(completedByCampaign.entries()).map(
+          ([campaign_id, agg]) => {
+            const camp = campaignMap.get(campaign_id);
+            const has_unbilled = agg.unbilled > 0;
+            let invoice_status: BillingItem['invoice_status'] = 'invoiced';
+            if (agg.statuses.has('unbilled')) invoice_status = 'unbilled';
+            else if (agg.statuses.has('sent') || agg.statuses.has('processed')) invoice_status = 'sent';
+            else if (agg.statuses.has('invoiced')) invoice_status = 'invoiced';
+            return {
+              campaign_id,
+              campaign_title: camp?.campaign_title ?? null,
+              location: camp?.location ?? null,
+              completed_count: agg.count,
+              total_amount: agg.total,
+              invoice_status,
+              has_unbilled: has_unbilled,
+            };
+          }
+        );
+
+        setRecruitmentList(recruitment);
+        setOperationList(operation);
+        setBillingList(billing);
+      })();
     }
   }, [user, refreshKey]);
+
+  const recruitmentSorted = useMemo(() => {
+    return [...recruitmentList].sort((a, b) => {
+      const deadlineA = a.final_date || a.end_date || a.start_date || '';
+      const deadlineB = b.final_date || b.end_date || b.start_date || '';
+      const alertA = getRecruitmentDeadlineAlert(deadlineA);
+      const alertB = getRecruitmentDeadlineAlert(deadlineB);
+      if (alertA === 'overdue' && alertB !== 'overdue') return -1;
+      if (alertA !== 'overdue' && alertB === 'overdue') return 1;
+      if (alertA === 'soon' && alertB !== 'soon') return -1;
+      if (alertA !== 'soon' && alertB === 'soon') return 1;
+      return (deadlineA || '9999').localeCompare(deadlineB || '9999');
+    });
+  }, [recruitmentList]);
+
+  const operationSorted = useMemo(() => {
+    return [...operationList].sort((a, b) => {
+      const alertA = getReportDeadlineAlert(a.confirmed_date);
+      const alertB = getReportDeadlineAlert(b.confirmed_date);
+      if (alertA === 'overdue' && alertB !== 'overdue') return -1;
+      if (alertA !== 'overdue' && alertB === 'overdue') return 1;
+      if (alertA === 'soon' && alertB !== 'soon') return -1;
+      if (alertA !== 'soon' && alertB === 'soon') return 1;
+      const dA = a.confirmed_date ? new Date(a.confirmed_date).getTime() : 0;
+      const dB = b.confirmed_date ? new Date(b.confirmed_date).getTime() : 0;
+      return dA - dB;
+    });
+  }, [operationList]);
 
   if (loading) {
     return (
@@ -244,164 +362,234 @@ export default function AdminDashboardPage() {
           ダッシュボード
         </h1>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-6">
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-agrix-forest/10">
-                  <Landmark className="w-6 h-6 text-agrix-forest" />
-                </div>
-                <div>
-                  <CardTitle className="text-base">合計面積</CardTitle>
-                  <CardDescription>直近案件の申込合計</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl md:text-3xl font-black text-agrix-forest tabular-nums">
-                {providerKpi.totalArea10r.toFixed(1)}
-                <span className="text-base font-medium text-dashboard-muted ml-1">反</span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-agrix-gold/20">
-                  <CircleDollarSign className="w-6 h-6 text-agrix-gold" />
-                </div>
-                <div>
-                  <CardTitle className="text-base">現在の単価</CardTitle>
-                  <CardDescription>募集中案件の暫定単価</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl md:text-3xl font-black tabular-nums">
-                {providerKpi.currentUnitPrice != null ? (
-                  <>
-                    <span className="text-agrix-gold">¥{providerKpi.currentUnitPrice.toLocaleString()}</span>
-                    <span className="text-base font-medium text-dashboard-muted ml-1">/10a</span>
-                  </>
-                ) : (
-                  <span className="text-dashboard-muted font-medium text-xl">—</span>
-                )}
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="mb-6">
+        {/* 上段: 集客・案件管理 */}
+        <section className="mb-8">
           <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">
-            <Link2 className="w-5 h-5 text-agrix-forest" />
-            農家招待リンク
+            <FolderKanban className="w-5 h-5 text-agrix-forest" />
+            集客・案件管理
           </h2>
           <Card>
-            <CardContent className="p-4">
-              <p className="text-sm text-dashboard-muted mb-3">
-                このリンクを農家に共有すると、新規登録時に貴社と自動で紐付きます（1農家あたり最大10業者まで）。
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="flex-1 min-w-0 text-xs md:text-sm bg-dashboard-bg border border-dashboard-border rounded-lg px-3 py-2 break-all">
-                  {typeof window !== 'undefined'
-                    ? `${window.location.origin}/login?signup=1&provider_id=${user?.id ?? ''}`
-                    : `${user?.id ?? ''}`}
-                </code>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="shrink-0"
-                  onClick={() => {
-                    const url =
-                      typeof window !== 'undefined'
-                        ? `${window.location.origin}/login?signup=1&provider_id=${user?.id ?? ''}`
-                        : '';
-                    if (url && navigator.clipboard?.writeText) {
-                      navigator.clipboard.writeText(url);
-                      toast.success('リンクをコピーしました');
-                    } else {
-                      toast.error('コピーに失敗しました');
-                    }
-                  }}
-                >
-                  <Copy className="w-4 h-4 mr-1" /> コピー
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="mb-6">
-          <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">
-            <Calendar className="w-5 h-5 text-agrix-forest" />
-            直近の作業予定
-          </h2>
-          <Card>
-            {upcomingWork.length === 0 ? (
-              <CardContent className="p-10 flex flex-col items-center justify-center text-center">
-                <div className="rounded-full bg-dashboard-muted/20 p-6 mb-4">
-                  <CalendarRange className="w-12 h-12 text-dashboard-muted" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">募集中の案件</CardTitle>
+              <CardDescription>応募状況の確認・募集締切</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recruitmentSorted.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-dashboard-muted font-medium mb-3">募集中の案件はありません</p>
+                  <Link href="/admin/campaigns/new">
+                    <Button className="gap-2 bg-agrix-forest hover:bg-agrix-forest-dark">
+                      <PlusCircle className="w-4 h-4" />
+                      案件を作成
+                    </Button>
+                  </Link>
                 </div>
-                <p className="font-bold text-dashboard-text mb-1">現在予定はありません</p>
-                <p className="text-sm text-dashboard-muted mb-6 max-w-sm">
-                  新規案件を作成すると、ここに直近の作業予定が表示されます。
-                </p>
-                <Link
-                  href="/admin/campaigns/new"
-                  className="inline-flex items-center gap-2 rounded-xl bg-agrix-forest text-white px-5 py-2.5 text-sm font-bold hover:bg-agrix-forest-dark transition-colors"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  案件を作成
-                </Link>
-              </CardContent>
-            ) : (
-              <ul className="divide-y divide-dashboard-border">
-                {upcomingWork.map((w) => (
-                  <li key={w.id} className="p-4 flex items-center justify-between gap-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-dashboard-text">{w.campaign_title || w.location}</p>
-                      <p className="text-sm text-dashboard-muted">
-                        {w.confirmed_date || w.final_date
-                          ? new Date(w.confirmed_date || w.final_date).toLocaleDateString('ja-JP')
-                          : '日付未確定'}
-                        {' · '}
-                        申込 {w.booking_count} 件
-                        {w.is_closed || w.status === 'closed' ? ' · 締切済' : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {!w.is_closed && (w.status === 'open' || w.status === 'applied') && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const res = await closeCampaign(w.id);
-                            if (res.success) {
-                              toast.success('募集を締め切りました');
-                              setRefreshKey((k) => k + 1);
-                            } else {
-                              toast.error(res.error ?? '締切に失敗しました');
-                            }
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-agrix-gold/20 text-agrix-gold-dark text-sm font-bold hover:bg-agrix-gold/30 border border-agrix-gold/50"
-                        >
-                          募集締切
-                        </button>
-                      )}
-                      <Link
-                        href="/provider/calendar"
-                        className="text-sm font-bold text-agrix-forest hover:underline flex items-center gap-1"
+              ) : (
+                <ul className="divide-y divide-dashboard-border">
+                  {recruitmentSorted.map((c) => {
+                    const deadline = c.final_date || c.end_date || c.start_date;
+                    const deadlineAlert = getRecruitmentDeadlineAlert(deadline);
+                    return (
+                      <li
+                        key={c.id}
+                        className={cn(
+                          'p-4 flex flex-wrap items-center justify-between gap-3 rounded-xl -mx-1 transition-colors',
+                          deadlineAlert === 'overdue' && 'bg-red-500/10 border border-red-500/30',
+                          deadlineAlert === 'soon' && 'bg-amber-500/10 border border-amber-500/30'
+                        )}
                       >
-                        カレンダー <ArrowRight className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-dashboard-text">
+                              {c.campaign_title || c.location || '（無題）'}
+                            </p>
+                            {deadlineAlert === 'overdue' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                締切超過
+                              </span>
+                            )}
+                            {deadlineAlert === 'soon' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-bold">
+                                <Clock className="w-3.5 h-3.5" />
+                                締切が近い
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-dashboard-muted mt-0.5">
+                            応募 {c.application_count} 件 · 合計 {c.total_area_10r.toFixed(1)} 反
+                            {deadline
+                              ? ` · 締切 ${new Date(deadline).toLocaleDateString('ja-JP')}`
+                              : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-agrix-gold/50 text-agrix-gold-dark hover:bg-agrix-gold/20"
+                            onClick={async () => {
+                              const res = await closeCampaign(c.id);
+                              if (res.success) {
+                                toast.success('募集を締め切りました');
+                                setRefreshKey((k) => k + 1);
+                              } else {
+                                toast.error(res.error ?? '締切に失敗しました');
+                              }
+                            }}
+                          >
+                            募集締切
+                          </Button>
+                          <Link
+                            href="/provider/projects"
+                            className="inline-flex items-center gap-1 text-sm font-bold text-agrix-forest hover:underline"
+                          >
+                            案件 <ArrowRight className="w-4 h-4" />
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
           </Card>
         </section>
 
+        {/* 中段: 作業実績・報告 */}
+        <section className="mb-8">
+          <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">
+            <ListTodo className="w-5 h-5 text-agrix-forest" />
+            作業実績・報告
+          </h2>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">作業日確定済み・未報告</CardTitle>
+              <CardDescription>実績報告が必要な予約</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {operationSorted.length === 0 ? (
+                <div className="py-10 text-center text-dashboard-muted">
+                  <p className="font-medium mb-1">未報告の作業はありません</p>
+                  <p className="text-sm">
+                    案件を「日付確定」まで進めると、ここに表示されます。
+                  </p>
+                  <Link href="/provider/projects" className="inline-block mt-3">
+                    <Button variant="outline" size="sm">
+                      案件一覧へ
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <ul className="divide-y divide-dashboard-border">
+                  {operationSorted.map((b) => {
+                    const reportAlert = getReportDeadlineAlert(b.confirmed_date);
+                    return (
+                      <li
+                        key={b.id}
+                        className={cn(
+                          'p-4 flex flex-wrap items-center justify-between gap-3 rounded-xl -mx-1 transition-colors',
+                          reportAlert === 'overdue' && 'bg-red-500/10 border border-red-500/30',
+                          reportAlert === 'soon' && 'bg-amber-500/10 border border-amber-500/30'
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-dashboard-text">
+                              {b.campaign_title || b.location || '案件'}
+                            </p>
+                            {reportAlert === 'overdue' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                報告期限切れ
+                              </span>
+                            )}
+                            {reportAlert === 'soon' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-bold">
+                                <Clock className="w-3.5 h-3.5" />
+                                期日が近い
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-dashboard-muted mt-0.5">
+                            {b.farmer_name || '農家'}
+                            {' · '}
+                            {b.confirmed_date
+                              ? new Date(b.confirmed_date).toLocaleDateString('ja-JP')
+                              : '日付未定'}
+                            {' · '}
+                            {b.area_10r} 反
+                          </p>
+                        </div>
+                        <Link href="/provider/reports/new">
+                          <Button size="sm" className="gap-1 bg-agrix-forest hover:bg-agrix-forest-dark">
+                            <FileText className="w-4 h-4" />
+                            実績報告
+                          </Button>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* 下段: 請求・完了 */}
+        <section className="mb-8">
+          <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">
+            <Receipt className="w-5 h-5 text-agrix-forest" />
+            請求・完了
+          </h2>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">報告済み・請求状況</CardTitle>
+              <CardDescription>請求待ち・送付済・完了案件</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {billingList.length === 0 ? (
+                <div className="py-10 text-center text-dashboard-muted">
+                  <p className="font-medium">報告済みの案件はまだありません</p>
+                  <Link href="/provider/reports/new" className="inline-block mt-3">
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <FileText className="w-4 h-4" />
+                      実績報告をする
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <ul className="divide-y divide-dashboard-border">
+                  {billingList.map((item) => (
+                    <li key={item.campaign_id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-dashboard-text">
+                          {item.campaign_title || item.location || '（無題）'}
+                        </p>
+                        <p className="text-sm text-dashboard-muted mt-0.5">
+                          報告済み {item.completed_count} 件
+                          {item.total_amount > 0 && ` · 合計 ¥${item.total_amount.toLocaleString()}`}
+                          {' · '}
+                          {item.invoice_status === 'unbilled' && '請求待ち'}
+                          {(item.invoice_status === 'sent' || item.invoice_status === 'processed') && '送付済'}
+                          {item.invoice_status === 'invoiced' && '完了'}
+                        </p>
+                      </div>
+                      <Link
+                        href="/provider/billings"
+                        className="inline-flex items-center gap-1 text-sm font-bold text-agrix-forest hover:underline"
+                      >
+                        請求 <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* メニュー */}
         <section>
           <h2 className="text-base font-bold text-dashboard-text flex items-center gap-2 mb-4">メニュー</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
