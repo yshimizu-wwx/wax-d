@@ -6,6 +6,7 @@
  */
 
 import { geocodeWithGoogle } from '@/lib/google-maps';
+import { stripJapanFromDisplayAddress } from '@/lib/geo/addressFormat';
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const USER_AGENT = 'WayfinderAgriX/1.0 (Agricultural field mapping)';
@@ -168,7 +169,7 @@ async function reverseGeocodeWithNominatim(lat: number, lng: number): Promise<Ge
   return {
     lat: latNum,
     lng: lngNum,
-    displayName: data?.display_name ?? undefined,
+    displayName: (stripJapanFromDisplayAddress(data?.display_name ?? '') || data?.display_name) ?? undefined,
   };
 }
 
@@ -184,7 +185,12 @@ export async function reverseGeocodeAddress(lat: number, lng: number): Promise<G
     try {
       const { reverseGeocodeWithGoogle } = await import('@/lib/google-maps');
       const result = await reverseGeocodeWithGoogle(lat, lng);
-      if (result) return result;
+      if (result) {
+        return {
+          ...result,
+          displayName: stripJapanFromDisplayAddress(result.displayName) || result.displayName,
+        };
+      }
     } catch {
       /* フォールバックで Nominatim を試す */
     }

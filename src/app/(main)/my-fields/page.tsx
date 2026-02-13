@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import type { Field } from '@/types/database';
 import { getPolygonCenter } from '@/lib/geo/areaCalculator';
+import { stripJapanFromDisplayAddress } from '@/lib/geo/addressFormat';
 import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -88,7 +89,7 @@ export default function MyFieldsPage() {
   const openEdit = (f: Field) => {
     setEditingId(f.id);
     setFormName(f.name || '');
-    setFormAddress(f.address || '');
+    setFormAddress(stripJapanFromDisplayAddress(f.address) || '');
     setFormAreaSize(f.area_size != null ? String(f.area_size) : '');
     setShowForm(true);
   };
@@ -249,7 +250,7 @@ export default function MyFieldsPage() {
                   <div>
                     <p className="font-bold text-dashboard-text">{f.name || '（名称未設定）'}</p>
                     <p className="text-sm text-dashboard-muted">
-                      {f.address && `${f.address} · `}
+                      {f.address && `${stripJapanFromDisplayAddress(f.address)} · `}
                       {f.area_size != null && `${f.area_size} 反`}
                     </p>
                   </div>
