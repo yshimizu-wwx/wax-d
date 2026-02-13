@@ -100,16 +100,39 @@ export async function setCampaignCompleted(campaignId: string): Promise<{ succes
 
 export interface WorkRequestData {
   farmer_id: string;
+  provider_id: string;
   location?: string;
+  crop_name?: string;
+  task_category_name?: string;
+  task_detail_name?: string;
   crop_name_free_text?: string;
   task_category_free_text?: string;
   task_detail_free_text?: string;
   desired_start_date?: string;
   desired_end_date?: string;
   estimated_area_10r?: number;
-  desired_price?: number;
   notes?: string;
-  field_id?: string | null;
+  field_ids?: string[];
+}
+
+/** 紐付き業者（農家が選択可能な業者） */
+export interface LinkedProvider {
+  id: string;
+  name: string;
+}
+
+/** 農家が紐付いている業者一覧（作業依頼で選択可能） */
+export async function fetchLinkedProvidersForFarmer(farmerId: string): Promise<LinkedProvider[]> {
+  const { data: links } = await supabase
+    .from('farmer_providers')
+    .select('provider_id')
+    .eq('farmer_id', farmerId)
+    .eq('status', 'active');
+  const ids = links?.map((l) => l.provider_id).filter(Boolean) ?? [];
+  if (ids.length === 0) return [];
+  const { data: users } = await supabase.from('users').select('id, name').in('id', ids);
+  const nameMap = new Map((users ?? []).map((u) => [u.id, u.name ?? u.id]));
+  return ids.map((id) => ({ id, name: nameMap.get(id) ?? '業者' }));
 }
 
 export async function createWorkRequest(

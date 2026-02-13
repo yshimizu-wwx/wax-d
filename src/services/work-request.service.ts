@@ -8,16 +8,19 @@ import type { WorkRequest } from '@/types/database';
 
 export interface WorkRequestCreateInput {
   farmer_id: string;
+  provider_id: string;
   location?: string;
+  crop_name?: string;
+  task_category_name?: string;
+  task_detail_name?: string;
   crop_name_free_text?: string;
   task_category_free_text?: string;
   task_detail_free_text?: string;
   desired_start_date?: string;
   desired_end_date?: string;
   estimated_area_10r?: number;
-  desired_price?: number;
   notes?: string;
-  field_id?: string | null;
+  field_ids?: string[];
 }
 
 export interface WorkRequestCreateResult {
@@ -35,22 +38,28 @@ export async function createWorkRequest(
 ): Promise<WorkRequestCreateResult> {
   try {
     const id = `WR_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const insertRow: Record<string, unknown> = {
+      id,
+      farmer_id: input.farmer_id,
+      provider_id: input.provider_id,
+      location: input.location ?? null,
+      crop_name: input.crop_name ?? null,
+      task_category_name: input.task_category_name ?? null,
+      task_detail_name: input.task_detail_name ?? null,
+      crop_name_free_text: input.crop_name_free_text ?? null,
+      task_category_free_text: input.task_category_free_text ?? null,
+      task_detail_free_text: input.task_detail_free_text ?? null,
+      desired_start_date: input.desired_start_date ?? null,
+      desired_end_date: input.desired_end_date ?? null,
+      estimated_area_10r: input.estimated_area_10r ?? null,
+      notes: input.notes ?? null,
+      status: 'pending',
+    };
+    if (input.field_ids?.length) insertRow.field_ids = input.field_ids;
+
     const { data: row, error } = await supabase
       .from('work_requests')
-      .insert({
-        id,
-        farmer_id: input.farmer_id,
-        location: input.location ?? null,
-        crop_name_free_text: input.crop_name_free_text ?? null,
-        task_category_free_text: input.task_category_free_text ?? null,
-        task_detail_free_text: input.task_detail_free_text ?? null,
-        desired_start_date: input.desired_start_date ?? null,
-        desired_end_date: input.desired_end_date ?? null,
-        estimated_area_10r: input.estimated_area_10r ?? null,
-        desired_price: input.desired_price ?? null,
-        notes: input.notes ?? null,
-        status: 'pending',
-      })
+      .insert(insertRow)
       .select('id')
       .single();
 

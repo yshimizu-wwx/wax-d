@@ -2,14 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Send } from 'lucide-react';
+import Link from 'next/link';
+import { FileText, Send, Sprout } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
-import { createWorkRequest, fetchWorkRequestsByFarmer, type WorkRequestData } from '@/lib/api';
-import type { WorkRequest } from '@/types/database';
+import {
+  createWorkRequest,
+  fetchWorkRequestsByFarmer,
+  fetchFieldsByFarmer,
+  fetchLinkedProvidersForFarmer,
+  type WorkRequestData,
+} from '@/lib/api';
+import type { WorkRequest, Field } from '@/types/database';
+import type { LinkedProvider } from '@/lib/api';
 import AppLoader from '@/components/AppLoader';
 import WorkRequestForm from '@/components/WorkRequestForm';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 const statusLabel: Record<string, string> = {
   pending: '依頼中',
@@ -22,6 +31,8 @@ export default function RequestsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<WorkRequest[]>([]);
+  const [fields, setFields] = useState<Field[]>([]);
+  const [linkedProviders, setLinkedProviders] = useState<LinkedProvider[]>([]);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -33,6 +44,8 @@ export default function RequestsPage() {
   useEffect(() => {
     if (!user || user.role !== 'farmer') return;
     fetchWorkRequestsByFarmer(user.id).then(setRequests);
+    fetchFieldsByFarmer(user.id).then(setFields);
+    fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
   }, [user]);
 
   useEffect(() => {
@@ -83,7 +96,31 @@ export default function RequestsPage() {
 
         <section className="mb-8">
           <h2 className="text-lg font-bold text-dashboard-text mb-4">新規依頼</h2>
-          <WorkRequestForm farmerId={user.id} onSubmit={handleSubmit} />
+          {fields.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 flex flex-col items-center justify-center text-center">
+                <div className="rounded-full bg-amber-500/10 p-4 mb-4">
+                  <Sprout className="w-10 h-10 text-amber-600" />
+                </div>
+                <p className="font-bold text-dashboard-text mb-1">まずは圃場を登録してください</p>
+                <p className="text-sm text-dashboard-muted mb-4">
+                  作業依頼をするには、依頼対象の畑を登録する必要があります。
+                </p>
+                <Link href="/my-fields">
+                  <Button className="bg-agrix-forest hover:bg-agrix-forest-dark w-full sm:w-auto">
+                    畑を登録する
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <WorkRequestForm
+              farmerId={user.id}
+              fields={fields}
+              linkedProviders={linkedProviders}
+              onSubmit={handleSubmit}
+            />
+          )}
         </section>
 
         <section>
@@ -110,7 +147,6 @@ export default function RequestsPage() {
                           {r.location && `${r.location} · `}
                           希望: {r.desired_start_date || '未定'} ～ {r.desired_end_date || '未定'}
                           {r.estimated_area_10r != null && ` · ${r.estimated_area_10r} 反`}
-                          {r.desired_price != null && ` · ¥${Number(r.desired_price).toLocaleString()}`}
                         </p>
                         <p className="text-xs text-dashboard-muted mt-1">
                           {r.created_at && new Date(r.created_at).toLocaleString('ja-JP')}

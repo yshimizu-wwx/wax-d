@@ -365,6 +365,15 @@ export default function Home() {
                       area10r={area10r}
                       totalCampaignArea={totalCampaignArea}
                       onSubmit={handleFormSubmit}
+                      initialFormData={
+                        user?.role === 'farmer' && user
+                          ? {
+                              farmerName: user.name ?? '',
+                              phone: user.phone ?? '',
+                              email: user.email ?? '',
+                            }
+                          : undefined
+                      }
                     />
                   </CardContent>
                 </Card>

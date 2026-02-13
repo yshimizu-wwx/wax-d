@@ -95,7 +95,7 @@ export async function fetchCampaignTotalArea(
 }
 
 /**
- * Creates a new campaign (provider-facing). ID is generated here (GAS-style prefix C_).
+ * Creates a new campaign (provider-facing). ID is UUID (DB campaigns.id is uuid type).
  *
  * @param supabase - Supabase client
  * @param input - Form data and polygon
@@ -108,7 +108,7 @@ export async function createCampaign(
 ): Promise<CampaignCreateResult> {
   try {
     const polygonWKT = geoJSONToWKT(input.targetAreaPolygon);
-    const campaignId = `C_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const campaignId = crypto.randomUUID();
 
     const { data, error } = await supabase
       .from('campaigns')

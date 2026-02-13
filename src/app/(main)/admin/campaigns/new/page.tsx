@@ -340,6 +340,7 @@ export default function CampaignCreatePage() {
                             <PolygonMap
                                 onPolygonComplete={handlePolygonComplete}
                                 initialPolygon={coords || undefined}
+                                showAddressSearch
                             />
                         </div>
 

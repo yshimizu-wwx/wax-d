@@ -51,8 +51,8 @@ export function calculatePolygonArea10r(polygon: Polygon): number {
   // 1反 = 991.7355㎡ で換算
   const area10r = areaInSquareMeters / AREA_CONSTANTS.TAN_TO_SQUARE_METER;
 
-  // 小数点第2位で四捨五入
-  return Math.round(area10r * 100) / 100;
+  // 小数点第1位で四捨五入（Issue #16: UX のため細かすぎる表示を避ける）
+  return Math.round(area10r * 10) / 10;
 }
 
 /**

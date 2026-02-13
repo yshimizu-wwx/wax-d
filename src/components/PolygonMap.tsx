@@ -6,7 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import { leafletLayerToGeoJSON, calculatePolygonArea10r } from '@/lib/geo/areaCalculator';
-import { geocodeAddress } from '@/lib/geo/geocode';
+import { geocodeAddressViaApi } from '@/lib/geo/geocodeClient';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import type { Polygon } from 'geojson';
 
@@ -164,7 +164,7 @@ export default function PolygonMap(props: PolygonMapProps) {
     useEffect(() => {
         if (!initialAddress?.trim() || initialCenter != null || initialAddressDone.current) return;
         initialAddressDone.current = true;
-        geocodeAddress(initialAddress.trim()).then((result) => {
+        geocodeAddressViaApi(initialAddress.trim()).then((result) => {
             if (result) {
                 const coords: [number, number] = [result.lat, result.lng];
                 setResolvedInitialCenter(coords);
@@ -184,7 +184,7 @@ export default function PolygonMap(props: PolygonMapProps) {
         setSearchError(null);
         clearGeoError();
         try {
-            const result = await geocodeAddress(q);
+            const result = await geocodeAddressViaApi(q);
             if (result) {
                 setFlyToTarget([result.lat, result.lng]);
                 setIsFlying(true);

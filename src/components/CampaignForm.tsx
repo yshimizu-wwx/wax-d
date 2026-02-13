@@ -12,6 +12,8 @@ interface CampaignFormProps {
     area10r: number;
     totalCampaignArea: number;
     onSubmit: (formData: FarmerFormData) => Promise<void>;
+    /** ログインユーザーの情報で申込フォームをプリセット（Issue #16） */
+    initialFormData?: Partial<FarmerFormData>;
 }
 
 export interface FarmerFormData {
@@ -24,14 +26,14 @@ export interface FarmerFormData {
 
 const WIZARD_STEPS = 3;
 
-export default function CampaignForm({ project, area10r, totalCampaignArea, onSubmit }: CampaignFormProps) {
+export default function CampaignForm({ project, area10r, totalCampaignArea, onSubmit, initialFormData }: CampaignFormProps) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [formData, setFormData] = useState<FarmerFormData>({
-        farmerName: '',
-        phone: '',
-        email: '',
-        desiredStartDate: '',
-        desiredEndDate: '',
+        farmerName: initialFormData?.farmerName ?? '',
+        phone: initialFormData?.phone ?? '',
+        email: initialFormData?.email ?? '',
+        desiredStartDate: initialFormData?.desiredStartDate ?? '',
+        desiredEndDate: initialFormData?.desiredEndDate ?? '',
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FarmerFormData, string>>>({});

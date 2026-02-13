@@ -44,8 +44,12 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
   if (!trimmed) return null;
 
   if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
-    const googleResult = await geocodeWithGoogle(trimmed);
-    if (googleResult) return { lat: googleResult.lat, lng: googleResult.lng, displayName: googleResult.displayName };
+    try {
+      const googleResult = await geocodeWithGoogle(trimmed);
+      if (googleResult) return { lat: googleResult.lat, lng: googleResult.lng, displayName: googleResult.displayName };
+    } catch {
+      /* フォールバックで Nominatim を試す */
+    }
   }
 
   const query = normalizeQueryForJapan(trimmed);
@@ -87,7 +91,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
     await new Promise((r) => setTimeout(r, 1100)); // Nominatim 1req/sec を考慮
     result = await doRequest();
   }
-  // まだヒットしない場合：番地（数字-数字など）を除いた地域名で再検索（地図を少なくともその地域に移動）
+  // まだヒットしない場合：番地を除いた地域名で再検索
   if (!result && isLikelyJapaneseAddress(trimmed)) {
     const withoutNumber = trimmed.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
     if (withoutNumber && withoutNumber.length >= 2) {
@@ -96,5 +100,37 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
       result = await doRequest();
     }
   }
+  // 利根郡は群馬県なので、県名を付けて再試行
+  if (!result && /^利根郡/.test(trimmed)) {
+    params.set('q', normalizeQueryForJapan(`群馬県${trimmed}`));
+    await new Promise((r) => setTimeout(r, 1100));
+    result = await doRequest();
+    if (!result) {
+      const withoutNumber = trimmed.replace(/\s*[\d０-９\-－ー]+\s*$/, '').trim();
+      if (withoutNumber.length >= 2) {
+        params.set('q', normalizeQueryForJapan(`群馬県${withoutNumber}`));
+        await new Promise((r) => setTimeout(r, 1100));
+        result = await doRequest();
+      }
+    }
+  }
   return result;
+}
+
+/**
+ * 緯度・経度から住所を取得（逆ジオコーディング）
+ * サーバー側で Google を使用（キー設定時）。クライアントは /api/geocode?lat=&lng= 経由で利用
+ */
+export async function reverseGeocodeAddress(lat: number, lng: number): Promise<GeocodeResult | null> {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) return null;
+
+  if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+    try {
+      const { reverseGeocodeWithGoogle } = await import('@/lib/google-maps');
+      return reverseGeocodeWithGoogle(lat, lng);
+    } catch {
+      /* フォールバックなし（Nominatim 逆ジオコードは別実装可） */
+    }
+  }
+  return null;
 }

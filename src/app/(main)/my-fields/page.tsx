@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import type { Field } from '@/types/database';
 import { getPolygonCenter } from '@/lib/geo/areaCalculator';
+import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -95,12 +96,20 @@ export default function MyFieldsPage() {
   };
 
   const handlePolygonComplete = useCallback(
-    (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: import('geojson').Polygon | null) => {
+    async (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: import('geojson').Polygon | null) => {
       if (polygon && area10r > 0) {
-        setFormAreaSize(String(Math.round(area10r * 100) / 100));
+        // 面積は小数点第1位まで（Issue #16）
+        const areaRounded = Math.round(area10r * 10) / 10;
+        setFormAreaSize(String(areaRounded));
         const [lng, lat] = getPolygonCenter(polygon);
         setFormLat(lat);
         setFormLng(lng);
+        // 逆ジオコードで住所・デフォルト名称をセット（Issue #16）
+        const rev = await reverseGeocodeViaApi(lat, lng);
+        if (rev?.displayName) {
+          setFormAddress(rev.displayName);
+          setFormName(`${rev.displayName} 畑`);
+        }
       } else {
         setFormAreaSize('');
         setFormLat(null);
