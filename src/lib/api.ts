@@ -23,14 +23,43 @@ export async function fetchOpenCampaigns(): Promise<Project[]> {
   return campaignService.fetchOpenCampaigns(supabase);
 }
 
+export type { CampaignStatusFilter, FetchCampaignsOptions } from '@/services/campaign.service';
+
+export async function fetchCampaigns(
+  options: campaignService.FetchCampaignsOptions = {}
+): Promise<Project[]> {
+  return campaignService.fetchCampaigns(supabase, options);
+}
+
+export async function fetchCampaignById(
+  campaignId: string,
+  providerId?: string
+): Promise<Project | null> {
+  return campaignService.fetchCampaignById(supabase, campaignId, providerId);
+}
+
 export type { FarmerBookingItem } from '@/services/booking.service';
 
 export async function fetchBookingsByFarmer(farmerId: string): Promise<bookingService.FarmerBookingItem[]> {
   return bookingService.fetchBookingsByFarmer(supabase, farmerId);
 }
 
+export async function requestCancelBooking(
+  bookingId: string,
+  farmerId: string
+): Promise<{ success: boolean; error?: string }> {
+  return bookingService.requestCancelBooking(supabase, bookingId, farmerId);
+}
+
 export async function fetchCampaignTotalArea(campaignId: string): Promise<number> {
   return campaignService.fetchCampaignTotalArea(supabase, campaignId);
+}
+
+export type { CampaignBookingSummary, CampaignBookingSummaryItem } from '@/services/campaign.service';
+
+/** 業者案件一覧用: 複数案件の申込サマリ（件数・面積・金額・農家別一覧）を一括取得 */
+export async function fetchBookingSummariesForCampaigns(campaignIds: string[]) {
+  return campaignService.fetchBookingSummariesForCampaigns(supabase, campaignIds);
 }
 
 export interface BookingData {
@@ -41,7 +70,9 @@ export interface BookingData {
   email: string;
   desired_start_date?: string;
   desired_end_date?: string;
-  field_polygon: Polygon;
+  /** 畑選択で申し込む場合は指定。このとき field_polygon は省略可。 */
+  field_id?: string | null;
+  field_polygon?: Polygon | null;
   area_10r: number;
   locked_price: number;
 }
@@ -57,7 +88,8 @@ export async function createBooking(
     email: bookingData.email,
     desired_start_date: bookingData.desired_start_date,
     desired_end_date: bookingData.desired_end_date,
-    field_polygon: bookingData.field_polygon,
+    field_id: bookingData.field_id,
+    field_polygon: bookingData.field_polygon ?? undefined,
     area_10r: bookingData.area_10r,
     locked_price: bookingData.locked_price,
   });
@@ -98,6 +130,29 @@ export async function setCampaignCompleted(campaignId: string): Promise<{ succes
   return campaignService.setCampaignCompleted(supabase, campaignId);
 }
 
+/** 作業確定（一斉）: 日付1つを全申込に通知。案件 final_date と全 booking の confirmed_date を設定。 */
+export async function setWorkConfirmBulk(
+  campaignId: string,
+  finalDate: string
+): Promise<{ success: boolean; error?: string }> {
+  return campaignService.setWorkConfirmBulk(supabase, campaignId, finalDate);
+}
+
+/** 作業確定（個別）: 各申込に日付を設定。 */
+export async function setWorkConfirmIndividual(
+  campaignId: string,
+  updates: { bookingId: string; confirmedDate: string }[]
+): Promise<{ success: boolean; error?: string }> {
+  return campaignService.setWorkConfirmIndividual(supabase, campaignId, updates);
+}
+
+export type { BookingForRoute } from '@/services/campaign.service';
+
+/** ルート案表示用: 案件の申込一覧（畑情報付き）を取得。 */
+export async function fetchBookingsWithFieldsForRoute(campaignId: string) {
+  return campaignService.fetchBookingsWithFieldsForRoute(supabase, campaignId);
+}
+
 export interface WorkRequestData {
   farmer_id: string;
   provider_id: string;
@@ -126,6 +181,9 @@ export async function fetchLinkedProvidersForFarmer(_farmerId: string): Promise<
   const { data, error } = await supabase.rpc('get_linked_providers_for_current_farmer');
   if (error) {
     console.error('fetchLinkedProvidersForFarmer RPC error:', error);
+    if (error.message?.includes('Could not find the function') && error.message?.includes('get_linked_providers_for_current_farmer')) {
+      console.info('紐付き業者一覧用の RPC がデータベースに存在しません。Supabase でマイグレーションを適用してください。手順: docs/fix-linked-providers-rpc.md');
+    }
     return [];
   }
   const list = (data as Array<{ id: string; name: string }> | null) ?? [];
@@ -142,6 +200,25 @@ export async function fetchWorkRequestsByFarmer(farmerId: string): Promise<WorkR
   return workRequestService.fetchWorkRequestsByFarmer(supabase, farmerId);
 }
 
+export async function fetchWorkRequestsByProvider(providerId: string): Promise<WorkRequest[]> {
+  return workRequestService.fetchWorkRequestsByProvider(supabase, providerId);
+}
+
+export async function fetchWorkRequestById(
+  workRequestId: string,
+  providerId: string
+): Promise<WorkRequest | null> {
+  return workRequestService.fetchWorkRequestById(supabase, workRequestId, providerId);
+}
+
+export async function setWorkRequestConverted(
+  workRequestId: string,
+  providerId: string,
+  campaignId: string
+): Promise<{ success: boolean; error?: string }> {
+  return workRequestService.setWorkRequestConverted(supabase, workRequestId, providerId, campaignId);
+}
+
 export async function fetchFieldsByFarmer(farmerId: string): Promise<Field[]> {
   return fieldService.fetchFieldsByFarmer(supabase, farmerId);
 }
@@ -153,6 +230,7 @@ export interface FieldData {
   area_size?: number;
   lat?: number;
   lng?: number;
+  area_coordinates?: unknown;
 }
 
 export async function createField(
@@ -163,7 +241,7 @@ export async function createField(
 
 export async function updateField(
   fieldId: string,
-  data: Partial<Omit<FieldData, 'farmer_id'>>
+  data: Partial<Omit<FieldData, 'farmer_id'>> & { area_coordinates?: unknown }
 ): Promise<{ success: boolean; error?: string }> {
   return fieldService.updateField(supabase, fieldId, data);
 }

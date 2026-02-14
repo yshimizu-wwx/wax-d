@@ -11,9 +11,11 @@ import {
   ChevronRight,
   CheckCircle2,
   Clock,
+  MapPin,
 } from 'lucide-react';
 import { getCurrentUser, type User } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { formatDateWithWeekday } from '@/lib/dateFormat';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -28,6 +30,14 @@ interface CampaignInfo {
   status: string;
 }
 
+interface FieldInfo {
+  id: string;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+  address: string | null;
+}
+
 interface BookingTask {
   id: string;
   campaign_id: string;
@@ -37,6 +47,7 @@ interface BookingTask {
   work_status: string | null;
   confirmed_date: string | null;
   campaign?: CampaignInfo;
+  field?: FieldInfo | null;
 }
 
 function getAlertLevel(confirmedDate: string | null): 'overdue' | 'soon' | null {
@@ -48,6 +59,18 @@ function getAlertLevel(confirmedDate: string | null): 'overdue' | 'soon' | null 
   const diffDays = Math.ceil((d.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
   if (diffDays < 0) return 'overdue';
   if (diffDays <= DAYS_NEAR) return 'soon';
+  return null;
+}
+
+/** 畑の位置で Google マップを開く URL（緯度経度または住所） */
+function getGoogleMapUrlForField(field: FieldInfo | null | undefined): string | null {
+  if (!field) return null;
+  if (field.lat != null && field.lng != null) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(`${field.lat},${field.lng}`)}`;
+  }
+  if (field.address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(field.address)}`;
+  }
   return null;
 }
 
@@ -90,7 +113,10 @@ export default function ProviderTasksPage() {
         .in('campaign_id', campaignIds)
         .neq('status', 'canceled');
 
-      const list = (bookData ?? []) as BookingTask[];
+      const list = ((bookData ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
+        ...row,
+        field: null as FieldInfo | null,
+      })) as BookingTask[];
       const campMap = new Map(campList.map((c) => [c.id, c]));
       list.forEach((b) => {
         b.campaign = campMap.get(b.campaign_id);
@@ -137,6 +163,10 @@ export default function ProviderTasksPage() {
 
   const renderTaskRow = (b: BookingTask, showAlert: boolean) => {
     const alertLevel = showAlert ? getAlertLevel(b.confirmed_date) : null;
+    const fieldMapHref = b.field?.id ? `/provider/field-map/${b.field.id}` : null;
+    const mapUrl = getGoogleMapUrlForField(b.field);
+    const fieldLabel = b.field?.name || b.campaign?.campaign_title || b.campaign?.location || '畑';
+    const linkHref = fieldMapHref ?? mapUrl ?? null;
     return (
       <li
         key={b.id}
@@ -148,9 +178,18 @@ export default function ProviderTasksPage() {
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-bold text-dashboard-text">
-              {b.campaign?.campaign_title || b.campaign?.location || '案件'}
-            </p>
+            {linkHref ? (
+              <a
+                href={linkHref}
+                {...(fieldMapHref ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+                className="font-bold text-dashboard-text hover:text-agrix-forest hover:underline inline-flex items-center gap-1.5"
+              >
+                {fieldLabel}
+                <MapPin className="w-4 h-4 shrink-0 text-agrix-forest" />
+              </a>
+            ) : (
+              <p className="font-bold text-dashboard-text">{fieldLabel}</p>
+            )}
             {alertLevel === 'overdue' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold">
                 <AlertTriangle className="w-3.5 h-3.5" />
@@ -165,10 +204,10 @@ export default function ProviderTasksPage() {
             )}
           </div>
           <p className="text-sm text-dashboard-muted mt-0.5">
-            {b.farmer_name || '農家'}
+            <span className="font-medium text-dashboard-text">{b.farmer_name || '農家'}</span>
             {' · '}
             {b.confirmed_date
-              ? new Date(b.confirmed_date).toLocaleDateString('ja-JP')
+              ? formatDateWithWeekday(b.confirmed_date)
               : '日付未定'}
             {' · '}
             {b.area_10r} 反

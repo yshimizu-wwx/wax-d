@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Sprout, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,6 +15,7 @@ import {
   type FieldData,
 } from '@/lib/api';
 import type { Field } from '@/types/database';
+import type { Polygon } from 'geojson';
 import { getPolygonCenter } from '@/lib/geo/areaCalculator';
 import { stripJapanFromDisplayAddress } from '@/lib/geo/addressFormat';
 import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
@@ -52,6 +54,7 @@ export default function MyFieldsPage() {
   const [formAreaSize, setFormAreaSize] = useState<string>('');
   const [formLat, setFormLat] = useState<number | null>(null);
   const [formLng, setFormLng] = useState<number | null>(null);
+  const [formPolygon, setFormPolygon] = useState<Polygon | null>(null);
   const [addressFromMap, setAddressFromMap] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -82,6 +85,7 @@ export default function MyFieldsPage() {
     setFormAreaSize('');
     setFormLat(null);
     setFormLng(null);
+    setFormPolygon(null);
     setAddressFromMap(false);
     setShowForm(true);
   };
@@ -100,11 +104,12 @@ export default function MyFieldsPage() {
   };
 
   const handlePolygonComplete = useCallback(
-    async (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: import('geojson').Polygon | null) => {
+    async (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: Polygon | null) => {
       if (polygon && area10r > 0) {
         // 面積は小数点第1位まで（Issue #16）
         const areaRounded = Math.round(area10r * 10) / 10;
         setFormAreaSize(String(areaRounded));
+        setFormPolygon(polygon);
         const [lng, lat] = getPolygonCenter(polygon);
         setFormLat(lat);
         setFormLng(lng);
@@ -119,6 +124,7 @@ export default function MyFieldsPage() {
         setFormAreaSize('');
         setFormLat(null);
         setFormLng(null);
+        setFormPolygon(null);
       }
     },
     []
@@ -150,9 +156,16 @@ export default function MyFieldsPage() {
     setSubmitting(true);
     try {
       if (editingId) {
+        const editingField = fields.find((f) => f.id === editingId);
+        // 緯度経度がある場合は逆ジオコードで取得した正確な住所を反映
+        let addressToSave = formAddress || undefined;
+        if (editingField?.lat != null && editingField?.lng != null) {
+          const rev = await reverseGeocodeViaApi(editingField.lat, editingField.lng);
+          if (rev?.displayName) addressToSave = rev.displayName;
+        }
         const result = await updateField(editingId, {
           name: formName || undefined,
-          address: formAddress || undefined,
+          address: addressToSave,
           area_size: formAreaSize ? Number(formAreaSize) : undefined,
         });
         if (result.success) {
@@ -163,13 +176,25 @@ export default function MyFieldsPage() {
           toast.error(result.error);
         }
       } else {
+        // 範囲（ポリゴン）を登録する場合は、中心ピン（緯度経度）も範囲の中心で必ずセットで記録（業者のルート・ナビで使用）
+        const centerFromPolygon = formPolygon && formPolygon.coordinates[0]?.length >= 3
+          ? getPolygonCenter(formPolygon)
+          : null;
+        const [centerLng, centerLat] = centerFromPolygon ?? [formLng ?? null, formLat ?? null];
+        // 緯度経度がある場合は逆ジオコードで取得した正確な住所を反映
+        let addressToSave = formAddress || undefined;
+        if (centerLat != null && centerLng != null) {
+          const rev = await reverseGeocodeViaApi(centerLat, centerLng);
+          if (rev?.displayName) addressToSave = rev.displayName;
+        }
         const data: FieldData = {
           farmer_id: user.id,
           name: formName.trim() || undefined,
-          address: formAddress || undefined,
+          address: addressToSave,
           area_size: formAreaSize ? Number(formAreaSize) : undefined,
-          lat: formLat ?? undefined,
-          lng: formLng ?? undefined,
+          lat: centerLat ?? formLat ?? undefined,
+          lng: centerLng ?? formLng ?? undefined,
+          area_coordinates: formPolygon ?? undefined,
         };
         const result = await createField(data);
         if (result.success) {
@@ -247,9 +272,14 @@ export default function MyFieldsPage() {
             <ul className="divide-y divide-dashboard-border">
               {fields.map((f) => (
                 <li key={f.id} className="p-4 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-dashboard-text">{f.name || '（名称未設定）'}</p>
-                    <p className="text-sm text-dashboard-muted">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/my-fields/${f.id}/map`}
+                      className="font-bold text-dashboard-text text-agrix-forest hover:underline focus:outline-none focus:ring-2 focus:ring-agrix-forest/50 rounded"
+                    >
+                      {f.name || '（名称未設定）'}
+                    </Link>
+                    <p className="text-sm text-dashboard-muted mt-0.5">
                       {f.address && `${stripJapanFromDisplayAddress(f.address)} · `}
                       {f.area_size != null && `${f.area_size} 反`}
                     </p>

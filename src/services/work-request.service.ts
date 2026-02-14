@@ -30,16 +30,14 @@ export interface WorkRequestCreateResult {
 }
 
 /**
- * Creates a new work request. ID generated with prefix WR_ (GAS-style).
+ * Creates a new work request. ID は DB の uuid デフォルト（gen_random_uuid()）に任せる。
  */
 export async function createWorkRequest(
   supabase: SupabaseClient,
   input: WorkRequestCreateInput
 ): Promise<WorkRequestCreateResult> {
   try {
-    const id = `WR_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const insertRow: Record<string, unknown> = {
-      id,
       farmer_id: input.farmer_id,
       provider_id: input.provider_id,
       location: input.location ?? null,
@@ -67,7 +65,7 @@ export async function createWorkRequest(
       console.error('Error creating work request:', error);
       return { success: false, error: error.message };
     }
-    return { success: true, requestId: row?.id ?? id };
+    return { success: true, requestId: row?.id ?? '' };
   } catch (e) {
     return {
       success: false,
@@ -94,4 +92,65 @@ export async function fetchWorkRequestsByFarmer(
     return [];
   }
   return data ?? [];
+}
+
+/**
+ * Fetches all work requests for a provider (incoming requests), ordered by created_at desc.
+ */
+export async function fetchWorkRequestsByProvider(
+  supabase: SupabaseClient,
+  providerId: string
+): Promise<WorkRequest[]> {
+  const { data, error } = await supabase
+    .from('work_requests')
+    .select('*')
+    .eq('provider_id', providerId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching work requests by provider:', error);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
+ * Fetches a single work request by id. Provider can only fetch their own.
+ */
+export async function fetchWorkRequestById(
+  supabase: SupabaseClient,
+  workRequestId: string,
+  providerId: string
+): Promise<WorkRequest | null> {
+  const { data, error } = await supabase
+    .from('work_requests')
+    .select('*')
+    .eq('id', workRequestId)
+    .eq('provider_id', providerId)
+    .single();
+
+  if (error || !data) return null;
+  return data as WorkRequest;
+}
+
+/**
+ * Updates work request when provider converts it to a campaign.
+ */
+export async function setWorkRequestConverted(
+  supabase: SupabaseClient,
+  workRequestId: string,
+  providerId: string,
+  campaignId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('work_requests')
+    .update({ status: 'converted', converted_campaign_id: campaignId })
+    .eq('id', workRequestId)
+    .eq('provider_id', providerId);
+
+  if (error) {
+    console.error('Error updating work request converted:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }

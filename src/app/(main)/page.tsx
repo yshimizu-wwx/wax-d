@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -31,6 +30,7 @@ import {
 import { getCurrentUser, type User } from '@/lib/auth';
 import { Project, type Field } from '@/types/database';
 import { isFieldInCampaignArea } from '@/lib/geo/spatial-queries';
+import { formatDateWithWeekday, getDefaultPeriod } from '@/lib/dateFormat';
 import type { Polygon } from 'geojson';
 import type { FarmerFormData } from '@/components/CampaignForm';
 import CampaignTimelineCard, { type CampaignWithArea } from '@/components/CampaignTimelineCard';
@@ -53,19 +53,6 @@ function parseInterestedCropIds(raw: string | null | undefined): string[] {
   return [];
 }
 
-const PolygonMap = dynamic(() => import('@/components/PolygonMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full bg-dashboard-card animate-pulse rounded-2xl flex items-center justify-center text-dashboard-muted">
-      地図を読み込み中...
-    </div>
-  ),
-});
-
-const CampaignForm = dynamic(() => import('@/components/CampaignForm'), {
-  ssr: false,
-});
-
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -75,9 +62,6 @@ export default function Home() {
   const [allCampaignsWithArea, setAllCampaignsWithArea] = useState<CampaignWithArea[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignWithArea | null>(null);
   const [loading, setLoading] = useState(true);
-  const [area10r, setArea10r] = useState<number>(0);
-  const [polygon, setPolygon] = useState<Polygon | null>(null);
-  const [coords, setCoords] = useState<{ lat: number; lng: number }[] | null>(null);
   const [farmerBookings, setFarmerBookings] = useState<FarmerBookingItem[]>([]);
   const [farmerFields, setFarmerFields] = useState<Field[]>([]);
   const [linkedProviders, setLinkedProviders] = useState<LinkedProvider[]>([]);
@@ -90,8 +74,8 @@ export default function Home() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'past'>('all');
   const [filterByMyFields, setFilterByMyFields] = useState(false);
   const [filterByMyCrops, setFilterByMyCrops] = useState(false);
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState(() => getDefaultPeriod().from);
+  const [filterDateTo, setFilterDateTo] = useState(() => getDefaultPeriod().to);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -158,16 +142,11 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [userLoading, user, selectedProviderId]);
 
-  const handlePolygonComplete = (
-    newCoords: { lat: number; lng: number }[] | null,
-    newArea10r: number,
-    newPolygon: Polygon | null
-  ) => {
-    setCoords(newCoords);
-    setArea10r(newArea10r);
-    setPolygon(newPolygon);
-  };
-
+  /** 案件単位で申し込むため、申込面積は案件の target_area_10r を使用 */
+  const area10r = useMemo(
+    () => (selectedCampaign ? (selectedCampaign.target_area_10r ?? 1) : 0),
+    [selectedCampaign]
+  );
   const totalCampaignArea = selectedCampaign?.totalArea10r ?? 0;
 
   // 農家: 自分の品目ID・畑が案件エリアに入っているか・フィルタ＆ソート済み一覧
@@ -246,10 +225,11 @@ export default function Home() {
   }, [user?.role, openCampaignsWithArea, selectedCampaign]);
 
   const handleFormSubmit = async (formData: FarmerFormData) => {
-    if (!selectedCampaign || !polygon) {
-      toast.error('案件情報または圃場データが不足しています');
+    if (!selectedCampaign) {
+      toast.error('案件を選択してください');
       return;
     }
+    const applicationArea = selectedCampaign.target_area_10r ?? 1;
     const pricing = {
       base_price: selectedCampaign.base_price || 0,
       min_price: selectedCampaign.min_price || 0,
@@ -258,7 +238,7 @@ export default function Home() {
       max_target_area_10r: selectedCampaign.max_target_area_10r ?? undefined,
       execution_price: selectedCampaign.execution_price ?? undefined,
     };
-    const simulatedTotalArea = totalCampaignArea + area10r;
+    const simulatedTotalArea = totalCampaignArea + applicationArea;
     const validation = calculateCurrentUnitPrice(pricing, simulatedTotalArea);
     const lockedPrice = validation.currentPrice ?? selectedCampaign.base_price ?? 0;
     const bookingData: BookingData = {
@@ -269,21 +249,18 @@ export default function Home() {
       email: formData.email,
       desired_start_date: formData.desiredStartDate?.trim() || undefined,
       desired_end_date: formData.desiredEndDate?.trim() || undefined,
-      field_polygon: polygon,
-      area_10r: area10r,
+      field_polygon: null,
+      area_10r: applicationArea,
       locked_price: lockedPrice,
     };
     const result = await createBooking(bookingData);
     if (result.success) {
       toast.success(`予約が完了しました。予約ID: ${result.bookingId}`);
-      setArea10r(0);
-      setPolygon(null);
-      setCoords(null);
       if (user?.id) fetchBookingsByFarmer(user.id).then(setFarmerBookings);
       setAllCampaignsWithArea((prev) =>
         prev.map((c) =>
           c.id === selectedCampaign.id
-            ? { ...c, totalArea10r: (c.totalArea10r ?? 0) + area10r }
+            ? { ...c, totalArea10r: (c.totalArea10r ?? 0) + applicationArea }
             : c
         )
       );
@@ -320,8 +297,8 @@ export default function Home() {
         farmer_name: user.name ?? '',
         phone: user.phone ?? '',
         email: user.email ?? '',
-        desired_start_date: data.desiredStartDate || undefined,
-        desired_end_date: data.desiredEndDate || undefined,
+        desired_start_date: data.desiredDate || undefined,
+        desired_end_date: data.desiredDate || undefined,
         field_id: sel.fieldId,
         area_10r: sel.area10r,
         locked_price: lockedPrice,
@@ -418,7 +395,7 @@ export default function Home() {
                           </p>
                           <p className="text-sm text-dashboard-muted">
                             {c.start_date && c.end_date
-                              ? `${c.start_date} ～ ${c.end_date}`
+                              ? `${formatDateWithWeekday(c.start_date)} ～ ${formatDateWithWeekday(c.end_date)}`
                               : c.location}
                           </p>
                         </div>
@@ -472,8 +449,6 @@ export default function Home() {
       onApplicationDialogSubmit={handleApplicationDialogSubmit}
       applySectionRef={applySectionRef}
       area10r={area10r}
-      coords={coords}
-      onPolygonComplete={handlePolygonComplete}
       totalCampaignArea={totalCampaignArea}
       onFormSubmit={handleFormSubmit}
       onRequestCancel={handleRequestCancel}

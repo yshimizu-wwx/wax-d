@@ -18,6 +18,7 @@ export interface FarmerBookingItem {
   work_status?: string;
   locked_price?: number;
   created_at?: string;
+  field_id?: string | null;
   project?: Pick<
     Project,
     'id' | 'location' | 'campaign_title' | 'start_date' | 'end_date' | 'status' | 'is_closed'
@@ -32,7 +33,9 @@ export interface BookingCreateInput {
   email: string;
   desired_start_date?: string | null;
   desired_end_date?: string | null;
-  field_polygon: Polygon;
+  /** 畑選択で申し込む場合は field_id と area_10r を指定。このとき field_polygon は省略可。 */
+  field_id?: string | null;
+  field_polygon?: Polygon | null;
   area_10r: number;
   locked_price: number;
 }
@@ -71,7 +74,7 @@ export async function fetchBookingsByFarmer(
 ): Promise<FarmerBookingItem[]> {
   const { data: bookings, error } = await supabase
     .from('bookings')
-    .select('id, campaign_id, area_10r, status, work_status, locked_price, created_at')
+    .select('id, campaign_id, area_10r, status, work_status, locked_price, created_at, field_id')
     .eq('farmer_id', farmerId)
     .order('created_at', { ascending: false });
 
@@ -88,6 +91,7 @@ export async function fetchBookingsByFarmer(
     work_status?: string;
     locked_price?: number;
     created_at?: string;
+    field_id?: string | null;
   }>;
   if (list.length === 0) return [];
 
@@ -118,6 +122,7 @@ export async function fetchBookingsByFarmer(
     work_status: row.work_status,
     locked_price: row.locked_price != null ? Number(row.locked_price) : undefined,
     created_at: row.created_at,
+    field_id: row.field_id ?? undefined,
     project: projectMap.get(row.campaign_id),
   }));
 }
@@ -165,18 +170,17 @@ export async function createBooking(
       };
     }
 
-    const polygonWKT = geoJSONToWKT(input.field_polygon);
-    const bookingId = `BK_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const hasPolygon = input.field_polygon && Object.keys(input.field_polygon).length > 0;
+    const polygonWKT = hasPolygon ? geoJSONToWKT(input.field_polygon!) : null;
 
+    // id は DB の UUID デフォルトに任せる（bookings.id は uuid 型）
     const insertPayload: Record<string, unknown> = {
-      id: bookingId,
       campaign_id: input.campaign_id,
       farmer_name: input.farmer_name,
       phone: input.phone,
       email: input.email,
       desired_start_date: input.desired_start_date?.trim() || null,
       desired_end_date: input.desired_end_date?.trim() || null,
-      field_polygon: polygonWKT,
       area_10r: input.area_10r,
       locked_price: input.locked_price,
       status: 'confirmed',
@@ -184,6 +188,12 @@ export async function createBooking(
       invoice_status: 'unbilled',
       applied_at: new Date().toISOString(),
     };
+    if (polygonWKT != null) {
+      insertPayload.field_polygon = polygonWKT;
+    }
+    if (input.field_id != null && input.field_id !== '') {
+      insertPayload.field_id = input.field_id;
+    }
     if (input.farmer_id != null && input.farmer_id !== '') {
       insertPayload.farmer_id = input.farmer_id;
     }
@@ -198,7 +208,7 @@ export async function createBooking(
       console.error('Error creating booking:', error);
       return { success: false, error: error.message };
     }
-    return { success: true, bookingId: data?.id ?? bookingId };
+    return { success: true, bookingId: data?.id ?? '' };
   } catch (e) {
     console.error('Unexpected error creating booking:', e);
     return {
@@ -206,4 +216,32 @@ export async function createBooking(
       error: e instanceof Error ? e.message : 'Unknown error occurred',
     };
   }
+}
+
+/**
+ * キャンセル依頼（いきなりキャンセルせず業者に連絡が入る想定）。
+ * status を 'cancel_requested' に更新する。
+ */
+export async function requestCancelBooking(
+  supabase: SupabaseClient,
+  bookingId: string,
+  farmerId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({ status: 'cancel_requested' })
+    .eq('id', bookingId)
+    .eq('farmer_id', farmerId)
+    .in('status', ['confirmed', 'pending'])
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error requesting cancel:', error);
+    return { success: false, error: error.message };
+  }
+  if (!data) {
+    return { success: false, error: '申込が見つからないか、キャンセル依頼できない状態です' };
+  }
+  return { success: true };
 }

@@ -17,6 +17,7 @@ import type { WorkRequest, Field } from '@/types/database';
 import type { LinkedProvider } from '@/lib/api';
 import AppLoader from '@/components/AppLoader';
 import WorkRequestForm from '@/components/WorkRequestForm';
+import { formatDateWithWeekday, formatDateTimeWithWeekday } from '@/lib/dateFormat';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -176,11 +177,11 @@ function RequestsPageContent() {
                         </p>
                         <p className="text-sm text-dashboard-muted">
                           {r.location && `${r.location} · `}
-                          希望: {r.desired_start_date || '未定'} ～ {r.desired_end_date || '未定'}
+                          希望: {formatDateWithWeekday(r.desired_start_date, '未定')} ～ {formatDateWithWeekday(r.desired_end_date, '未定')}
                           {r.estimated_area_10r != null && ` · ${r.estimated_area_10r} 反`}
                         </p>
                         <p className="text-xs text-dashboard-muted mt-1">
-                          {r.created_at && new Date(r.created_at).toLocaleString('ja-JP')}
+                          {r.created_at && formatDateTimeWithWeekday(r.created_at)}
                           {' · '}
                           <span className={r.status === 'converted' ? 'text-agrix-forest font-medium' : r.status === 'rejected' ? 'text-red-600' : ''}>
                             {statusLabel[r.status] || r.status}

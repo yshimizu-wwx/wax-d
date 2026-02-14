@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Project } from '@/types/database';
 import { calculateCurrentUnitPrice, calculateFinalAmount, calculateTax } from '@/lib/calculator/priceCalculator';
+import { formatDateWithWeekday } from '@/lib/dateFormat';
+import { DateInputWithWeekday } from '@/components/ui/date-input-with-weekday';
 import type { CampaignPricing } from '@/lib/calculator/types';
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react';
 
@@ -118,10 +120,6 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
             setStep(hopeStep);
             return;
         }
-        if (area10r <= 0) {
-            toast.error('地図上で圃場を描画してください');
-            return;
-        }
         setIsSubmitting(true);
         try {
             await onSubmit(formData);
@@ -167,7 +165,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                         <div className="text-slate-500 mb-1">作業期間</div>
                         <div className="font-bold text-slate-800">
                             {project.start_date && project.end_date
-                                ? `${project.start_date} 〜 ${project.end_date}`
+                                ? `${formatDateWithWeekday(project.start_date)} 〜 ${formatDateWithWeekday(project.end_date)}`
                                 : '未定'}
                         </div>
                     </div>
@@ -253,25 +251,25 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">開始日 <span className="text-slate-400 text-xs ml-1">任意</span></label>
-                            <input
-                                type="date"
+                            <DateInputWithWeekday
                                 value={formData.desiredStartDate}
-                                onChange={(e) => handleChange('desiredStartDate', e.target.value)}
+                                onChange={(v) => handleChange('desiredStartDate', v)}
                                 min={project.start_date ?? undefined}
                                 max={project.end_date ?? undefined}
-                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.desiredStartDate ? 'border-red-500' : 'border-slate-200'}`}
+                                placeholder="yyyy/mm/dd（曜日）で選択"
+                                wrapperClassName={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus-within:ring-2 focus-within:ring-green-500 ${errors.desiredStartDate ? 'border-red-500' : 'border-slate-200'}`}
                             />
                             {errors.desiredStartDate && <p className="text-red-600 text-xs mt-1">{errors.desiredStartDate}</p>}
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">終了日 <span className="text-slate-400 text-xs ml-1">任意</span></label>
-                            <input
-                                type="date"
+                            <DateInputWithWeekday
                                 value={formData.desiredEndDate}
-                                onChange={(e) => handleChange('desiredEndDate', e.target.value)}
+                                onChange={(v) => handleChange('desiredEndDate', v)}
                                 min={project.start_date ?? undefined}
                                 max={project.end_date ?? undefined}
-                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.desiredEndDate ? 'border-red-500' : 'border-slate-200'}`}
+                                placeholder="yyyy/mm/dd（曜日）で選択"
+                                wrapperClassName={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus-within:ring-2 focus-within:ring-green-500 ${errors.desiredEndDate ? 'border-red-500' : 'border-slate-200'}`}
                             />
                             <p className="text-xs text-slate-500 mt-1">案件の期間内で選んでください</p>
                             {errors.desiredEndDate && <p className="text-red-600 text-xs mt-1">{errors.desiredEndDate}</p>}
@@ -321,7 +319,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                             <div className="text-4xl font-black text-green-600">
                                 {area10r.toFixed(2)} <span className="text-lg font-normal text-green-500">反 (10a)</span>
                             </div>
-                            {area10r === 0 && <p className="text-sm text-slate-500 mt-2">地図上で圃場を描画してください</p>}
+                            <p className="text-sm text-slate-500 mt-2">この案件の申込面積です</p>
                         </div>
                     </div>
 
@@ -351,7 +349,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
 
                     <button
                         type="submit"
-                        disabled={isSubmitting || area10r <= 0}
+                        disabled={isSubmitting}
                         className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white font-bold py-5 px-8 rounded-2xl hover:from-green-600 hover:to-green-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl text-lg inline-flex items-center justify-center gap-2"
                     >
                         {isSubmitting ? (

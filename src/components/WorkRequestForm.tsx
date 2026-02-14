@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchMasters } from '@/lib/masters';
 import { stripJapanFromDisplayAddress } from '@/lib/geo/addressFormat';
+import { DateInputWithWeekday } from '@/components/ui/date-input-with-weekday';
 import type { Master } from '@/types/database';
 import type { Field } from '@/types/database';
 import type { WorkRequestData, LinkedProvider } from '@/lib/api';
@@ -69,9 +70,10 @@ export default function WorkRequestForm({
       fetchMasters('task_category', providerId),
       fetchMasters('task_detail', providerId),
     ]).then(([c, tc, td]) => {
-      setCrops(c);
-      setTaskCategories(tc);
-      setTaskDetails(td);
+      // 業者側で非表示（inactive）にしたマスタは農家の選択肢に出さない
+      setCrops((c || []).filter((m) => m.status === 'active'));
+      setTaskCategories((tc || []).filter((m) => m.status === 'active'));
+      setTaskDetails((td || []).filter((m) => m.status === 'active'));
       setCropId('');
       setTaskCategoryId('');
       setTaskDetailId('');
@@ -377,24 +379,24 @@ export default function WorkRequestForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="desiredStartDate">希望開始日</Label>
-              <Input
+              <DateInputWithWeekday
                 id="desiredStartDate"
-                type="date"
                 value={desiredStartDate}
-                onChange={(e) => setDesiredStartDate(e.target.value)}
-                className="mt-1"
+                onChange={setDesiredStartDate}
+                placeholder="yyyy/mm/dd（曜日）で選択"
+                wrapperClassName="mt-1 rounded-lg border border-dashboard-border bg-dashboard-card focus-within:ring-2 focus-within:ring-agrix-forest"
               />
               {errors.desiredStartDate && <p className="text-xs text-red-600 mt-1">{errors.desiredStartDate}</p>}
             </div>
             <div>
               <Label htmlFor="desiredEndDate">希望終了日</Label>
-              <Input
+              <DateInputWithWeekday
                 id="desiredEndDate"
-                type="date"
                 value={desiredEndDate}
+                onChange={setDesiredEndDate}
                 min={desiredStartDate || undefined}
-                onChange={(e) => setDesiredEndDate(e.target.value)}
-                className="mt-1"
+                placeholder="yyyy/mm/dd（曜日）で選択"
+                wrapperClassName="mt-1 rounded-lg border border-dashboard-border bg-dashboard-card focus-within:ring-2 focus-within:ring-agrix-forest"
               />
               {errors.desiredEndDate && <p className="text-xs text-red-600 mt-1">{errors.desiredEndDate}</p>}
             </div>

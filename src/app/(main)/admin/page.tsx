@@ -25,6 +25,7 @@ import { getCurrentUser, type User } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { closeCampaign } from '@/lib/api';
 import { toast } from 'sonner';
+import { formatDateWithWeekday } from '@/lib/dateFormat';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -419,7 +420,7 @@ export default function AdminDashboardPage() {
                           <p className="text-sm text-dashboard-muted mt-0.5">
                             応募 {c.application_count} 件 · 合計 {c.total_area_10r.toFixed(1)} 反
                             {deadline
-                              ? ` · 締切 ${new Date(deadline).toLocaleDateString('ja-JP')}`
+                              ? ` · 締切 ${formatDateWithWeekday(deadline)}`
                               : ''}
                           </p>
                         </div>
@@ -515,7 +516,7 @@ export default function AdminDashboardPage() {
                             {b.farmer_name || '農家'}
                             {' · '}
                             {b.confirmed_date
-                              ? new Date(b.confirmed_date).toLocaleDateString('ja-JP')
+                              ? formatDateWithWeekday(b.confirmed_date)
                               : '日付未定'}
                             {' · '}
                             {b.area_10r} 反

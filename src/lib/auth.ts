@@ -15,6 +15,8 @@ export interface User {
     lng?: number | null;
     associated_provider_id?: string | null;
     invitation_code?: string | null;
+    /** 農家の生産品目（masters.id の配列を JSON 文字列で保存） */
+    interested_crop_ids?: string | null;
 }
 
 /**
@@ -51,6 +53,7 @@ export async function getCurrentUser(): Promise<User | null> {
             lng: row.lng ?? undefined,
             associated_provider_id: row.associated_provider_id ?? undefined,
             invitation_code: row.invitation_code ?? undefined,
+            interested_crop_ids: row.interested_crop_ids ?? undefined,
         } as User;
     } catch (error) {
         console.error('Error getting current user:', error);
@@ -102,6 +105,30 @@ export async function updateUserProfile(updates: {
                 ...(updates.phone !== undefined && { phone: updates.phone }),
                 ...(updates.address !== undefined && { address: updates.address }),
             })
+            .eq('email', session.user.email);
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        return { success: true };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        return { success: false, error: msg };
+    }
+}
+
+/**
+ * 農家の生産品目（interested_crop_ids）を更新する。JSON 配列文字列で保存。
+ */
+export async function updateFarmerProductionCrops(cropIds: string[]): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.email) {
+            return { success: false, error: 'ログインしていません' };
+        }
+        const value = cropIds.length > 0 ? JSON.stringify(cropIds) : null;
+        const { error } = await supabase
+            .from('users')
+            .update({ interested_crop_ids: value })
             .eq('email', session.user.email);
         if (error) {
             return { success: false, error: error.message };

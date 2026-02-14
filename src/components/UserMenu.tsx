@@ -64,6 +64,7 @@ export default function UserMenu() {
     <div className="relative" ref={menuRef}>
       <button
         type="button"
+        data-testid="user-menu-trigger"
         onClick={() => setOpen((o) => !o)}
         className={cn(
           'flex items-center gap-2 rounded-xl px-2 py-2 md:pl-3 md:pr-3 border border-slate-200 bg-white hover:bg-slate-50 transition-colors',

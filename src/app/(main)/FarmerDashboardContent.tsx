@@ -12,10 +12,9 @@ import { Label } from '@/components/ui/label';
 import type { User } from '@/lib/auth';
 import type { Field } from '@/types/database';
 import type { FarmerBookingItem, LinkedProvider } from '@/lib/api';
-import type { Polygon } from 'geojson';
+import { formatDateWithWeekday, isoToYyyyMmDd, yyyyMmDdToIso } from '@/lib/dateFormat';
 import type { FarmerFormData } from '@/components/CampaignForm';
 
-const PolygonMap = dynamic(() => import('@/components/PolygonMap'), { ssr: false });
 const CampaignForm = dynamic(() => import('@/components/CampaignForm'), { ssr: false });
 
 const STATUS_LABEL: Record<string, string> = {
@@ -42,13 +41,8 @@ export type FarmerDashboardContentProps = {
   farmerFields: Field[];
   onApplicationDialogSubmit: (data: ApplicationFormData) => Promise<void>;
   applySectionRef: React.RefObject<HTMLDivElement | null>;
+  /** 申込面積（案件単位のため案件の target_area_10r を渡す） */
   area10r: number;
-  coords: { lat: number; lng: number }[] | null;
-  onPolygonComplete: (
-    coords: { lat: number; lng: number }[] | null,
-    area10r: number,
-    polygon: Polygon | null
-  ) => void;
   totalCampaignArea: number;
   onFormSubmit: (formData: FarmerFormData) => Promise<void>;
   onRequestCancel: (bookingId: string) => Promise<void>;
@@ -82,8 +76,6 @@ export default function FarmerDashboardContent(props: FarmerDashboardContentProp
     onApplicationDialogSubmit,
     applySectionRef,
     area10r,
-    coords,
-    onPolygonComplete,
     totalCampaignArea,
     onFormSubmit,
     onRequestCancel,
@@ -205,17 +197,19 @@ export default function FarmerDashboardContent(props: FarmerDashboardContentProp
                       <Label htmlFor="filter-date-from" className="text-sm text-dashboard-muted shrink-0">期間</Label>
                       <Input
                         id="filter-date-from"
-                        type="date"
-                        value={filterDateFrom}
-                        onChange={(e) => setFilterDateFrom(e.target.value)}
+                        type="text"
+                        placeholder="yyyy/mm/dd"
+                        value={isoToYyyyMmDd(filterDateFrom)}
+                        onChange={(e) => setFilterDateFrom(yyyyMmDdToIso(e.target.value))}
                         className="w-36 h-8 text-sm"
                       />
                       <span className="text-dashboard-muted">～</span>
                       <Input
                         id="filter-date-to"
-                        type="date"
-                        value={filterDateTo}
-                        onChange={(e) => setFilterDateTo(e.target.value)}
+                        type="text"
+                        placeholder="yyyy/mm/dd"
+                        value={isoToYyyyMmDd(filterDateTo)}
+                        onChange={(e) => setFilterDateTo(yyyyMmDdToIso(e.target.value))}
                         className="w-36 h-8 text-sm"
                       />
                     </div>
@@ -272,62 +266,26 @@ export default function FarmerDashboardContent(props: FarmerDashboardContentProp
 
         {user?.role === 'farmer' && selectedCampaign && (
           <div ref={applySectionRef as React.RefObject<HTMLDivElement>} id="apply-section" className="scroll-mt-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <p className="text-dashboard-text font-bold text-sm">
-                申し込む案件: {(selectedCampaign as { campaign_title?: string }).campaign_title || selectedCampaign.location}
-              </p>
-              <div className="flex items-center gap-2 bg-agrix-forest/10 text-agrix-forest px-3 py-1.5 rounded-lg border border-agrix-forest/30">
-                <span className="text-xs font-bold">累計</span>
-                <span className="font-black">{(selectedCampaign.totalArea10r ?? 0).toFixed(1)} 反</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-              <section className="order-2 lg:order-1">
-                <Card className="p-4 h-[500px] lg:h-[700px] relative overflow-hidden">
-                  <div className="absolute top-4 left-4 z-[1000] bg-dashboard-card/95 backdrop-blur px-4 py-2 rounded-xl shadow-md border border-dashboard-border flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-agrix-forest" />
-                    <div>
-                      <h2 className="text-sm font-bold text-dashboard-text">圃場を描画</h2>
-                      <p className="text-xs text-dashboard-muted">地図上でクリックして圃場の範囲を指定</p>
-                    </div>
-                  </div>
-                  {area10r > 0 && (
-                    <div className="absolute top-4 right-4 z-[1000] bg-agrix-forest text-white px-5 py-3 rounded-xl shadow-sm border-2 border-agrix-gold/50 min-w-[180px]">
-                      <div className="text-xs font-bold uppercase tracking-wider mb-1 opacity-90">選択面積</div>
-                      <div className="text-2xl font-black">
-                        {area10r.toFixed(2)} <span className="text-sm font-normal opacity-90">反</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="w-full h-full rounded-xl overflow-hidden absolute inset-0 p-4 pt-14">
-                    <PolygonMap
-                      onPolygonComplete={onPolygonComplete}
-                      initialPolygon={coords || undefined}
-                    />
-                  </div>
-                </Card>
-              </section>
-              <section className="order-1 lg:order-2">
-                <Card>
-                  <CardContent className="p-6">
-                    <CampaignForm
-                      project={selectedCampaign}
-                      area10r={area10r}
-                      totalCampaignArea={totalCampaignArea}
-                      onSubmit={onFormSubmit}
-                      initialFormData={
-                        user?.role === 'farmer' && user
-                          ? {
-                              farmerName: user.name ?? '',
-                              phone: user.phone ?? '',
-                              email: user.email ?? '',
-                            }
-                          : undefined
-                      }
-                    />
-                  </CardContent>
-                </Card>
-              </section>
+            <div className="max-w-2xl mb-10">
+              <Card>
+                <CardContent className="p-6">
+                  <CampaignForm
+                    project={selectedCampaign}
+                    area10r={area10r}
+                    totalCampaignArea={totalCampaignArea}
+                    onSubmit={onFormSubmit}
+                    initialFormData={
+                      user?.role === 'farmer' && user
+                        ? {
+                            farmerName: user.name ?? '',
+                            phone: user.phone ?? '',
+                            email: user.email ?? '',
+                          }
+                        : undefined
+                    }
+                  />
+                </CardContent>
+              </Card>
             </div>
           </div>
         )}
@@ -365,7 +323,7 @@ export default function FarmerDashboardContent(props: FarmerDashboardContentProp
                           </span>
                         )}
                         {b.created_at &&
-                          ` · ${new Date(b.created_at).toLocaleDateString('ja-JP')}`}
+                          ` · ${formatDateWithWeekday(b.created_at)}`}
                       </p>
                     </div>
                     {(b.status === 'confirmed' || b.status === 'pending') && (

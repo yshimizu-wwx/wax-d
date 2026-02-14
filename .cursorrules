@@ -1,49 +1,119 @@
-# v3-app プロジェクトルール
+# v3-app プロジェクトルール（Wayfinder AgriX）
 
-## ディレクトリ構造
+## 1. ディレクトリ構造と命名規則
 
-- **App Router**: `src/app/` のみ。ルートグループ `(auth)` / `(main)` でレイアウトを分離。
-- **ページ**: `(main)/page.tsx`（農家トップ）、`(main)/admin/*`、`(main)/provider/*`、`(auth)/login`、`(auth)/auth/*`。feature 別は URL 階層（例: `admin/campaigns/new`）で表現し、`page.tsx` は各セグメントに1つ。
-- **API**: `src/app/api/` の Route Handler のみ。例: `api/provider/reports/submit/route.ts`。
-- **コンポーネント**: 共通は `src/components/` にフラット配置。shadcn 系のプリミティブは `src/components/ui/`（button, card, dialog, input, progress, skeleton, data-table）。
-- **ロジック・データ**: `src/lib/`。API 呼び出し・Supabase は `api.ts`、認証は `auth.ts`、マスタは `masters.ts`。ドメイン別はサブディレクトリ（`lib/calculator/`、`lib/geo/`）。
-- **型**: DB/アプリ共通は `src/types/database.ts`。ドメイン型は `lib/<domain>/types.ts`（例: `lib/calculator/types.ts`）。宣言のみは `types/*.d.ts`（leaflet-images, turf）。
-- **エントリ**: `src/middleware.ts` はルート直下。`tsconfig` の `include` は `src/**/*` と `.next/types/**/*`。
+### 1.1 App Router
 
-## 技術スタック（package.json / tsconfig）
+- **ベース**: `src/app/` のみ。ルートグループでレイアウトを分離。
+  - `(auth)`: 未認証／認証フロー用（`/login`, `/auth/callback`, `/auth/verified`, `/auth/pending-approval`）
+  - `(main)`: 認証済みメイン（農家トップ `/`, `/admin/*`, `/provider/*`, `/my-fields`, `/mypage`, `/case-map`, `/requests` 等）
+- **ページ**: 各セグメントに `page.tsx` を1つ。feature は URL 階層で表現（例: `admin/campaigns/new`, `admin/campaigns/copy`, `provider/reports/new`）。
+- **レイアウト**: `layout.tsx` は `app/layout.tsx`, `(auth)/layout.tsx`, `(main)/layout.tsx`。
 
-- **Runtime**: Node (Next.js 14), React 18。
-- **パス**: `baseUrl: "."`, `paths: { "@/*": ["./src/*"] }`。import は必ず `@/` で統一。
-- **Supabase**: ORM なし。`@supabase/ssr` + `@supabase/supabase-js` で直接クライアント利用。
-  - ブラウザ: `@/lib/supabase` の `createBrowserClient` インスタンス。
-  - サーバー（Route Handler / Server Components）: `@/lib/supabase/server` の `createClient()` を await して利用。
-  - middleware: `createServerClient` を `@supabase/ssr` から直接使い、cookies を自前で get/set/remove。
-- **UI**: Tailwind, `class-variance-authority` (cva), `clsx` + `tailwind-merge`。`cn()` は `@/lib/utils` から提供。Radix (dialog, progress, slot), Lucide, Sonner。
-- **地図・Geo**: Leaflet + react-leaflet, leaflet-draw, @turf/turf。型は `@/types/leaflet-images.d.ts`, `@/types/turf.d.ts`。
-- **その他**: FullCalendar (core, daygrid, list, timegrid, react), TanStack React Table, テストは `*.test.ts`（例: `lib/calculator/priceCalculator.test.ts`, `lib/geo/areaCalculator.test.ts`）。
+### 1.2 API
 
-## パターン
+- **Route Handler のみ**: `src/app/api/` に配置。
+  - 例: `api/geocode/route.ts`, `api/campaigns/calculate/route.ts`, `api/provider/reports/submit/route.ts`。
+- ファイル名は `route.ts` に統一。
 
-### 共有コンポーネント・ユーティリティ
+### 1.3 コンポーネント
 
-- コンポーネントは `@/components/` または `@/components/ui/` から import。レイアウトは `AppLayout`, `AppSidebar`, `BottomNav`, `Header`, `UserMenu`。
-- スタイル用ユーティリティは `cn` のみ `@/lib/utils` から。他は `@/lib/calculator/priceCalculator` や `@/lib/geo/areaCalculator` などドメイン別。
-- データ取得は `@/lib/api`（fetchProjects, fetchActiveProject, getCurrentUser 等）と `@/lib/masters`（fetchMasters, createMaster 等）。Repository という名前のモジュールは使わない。
+- **共通**: `src/components/` にフラット配置（例: `AppLayout`, `AppSidebar`, `BottomNav`, `Header`, `UserMenu`, `CampaignForm`, `ApplicationDialog`）。
+- **UI プリミティブ**: `src/components/ui/`（shadcn 系: `button`, `card`, `dialog`, `input`, `label`, `progress`, `skeleton`, `data-table`, `date-input-with-weekday`）。
 
-### 型
+### 1.4 ロジック・データ層
 
-- **DB・アプリ共通**: `src/types/database.ts` に `Project`, `Booking`, `Master` は `interface`、`MasterType` は `type`（union）。
-- **ドメイン**: `lib/calculator/types.ts` は `interface` のみ（CampaignPricing, PriceCalculationResult 等）。`lib/auth.ts` の `User` は `interface`。
-- **コンポーネント・API 固有**: そのファイル内で `interface` を export（例: `CampaignForm` の `FarmerFormData`, `api.ts` の `FarmerBookingItem`, `BookingData`, `CampaignCreateData`, `ui/button` の `ButtonProps`）。`type` は union/alias 用（例: `MasterType`）。
-- 他モジュールの型は `type X` で import するスタイル（例: `import type { User } from '@/lib/auth'`）。
+- **ライブラリ**: `src/lib/`。汎用は直下（`api.ts`, `auth.ts`, `masters.ts`, `utils.ts`, `errorMessage.ts`, `statusHelper.ts`, `dateFormat.ts`）。ドメイン別はサブディレクトリ（`lib/calculator/`, `lib/geo/`）。
+- **Supabase クライアント**: `src/lib/supabase.ts`（ブラウザ）, `src/lib/supabase/server.ts`（サーバー）。
+- **サービス層**: `src/services/`。ビジネスロジックと DB 操作（`booking.service.ts`, `campaign.service.ts`, `report.service.ts`, `field.service.ts`, `work-request.service.ts`, `auth.service.ts`）。Repository という名前のモジュールは使わない。
+- **フック**: `src/hooks/`（例: `useGeolocation.ts`）。カスタムフックは `use*` と命名。
 
-### 名前付け
+### 1.5 型
 
-- カスタムフックの `use*` は現状未使用（React/Next の useState, useRouter, usePathname 等のみ）。
-- データ層は `fetch*`, `create*`, `update*` 等の関数名。`*Repository` は使わない。
-- ページは `page.tsx`、API は `route.ts`。レイアウトは `layout.tsx`。
+- **DB・アプリ共通**: `src/types/database.ts`（`UserRow`, `Project`, `Booking`, `BookingRow`, `Master`, `MasterType`, `Field`, `WorkRequest`, `FarmerProvider` 等）。生成型は `src/types/database.types.ts`（`npx supabase gen types` で更新）。
+- **ドメイン型**: `lib/<domain>/types.ts`（例: `lib/calculator/types.ts` の `CampaignPricing`, `PriceCalculationResult`）。宣言のみは `types/*.d.ts`（`leaflet-images.d.ts`, `turf.d.ts`）。
+- **コンポーネント・API 固有**: そのファイル内で `interface` を export。他モジュールの型は `import type { X } from '...'` で参照。
 
-### API・Supabase 利用
+### 1.6 その他
 
-- Route Handler では `const supabase = await createClient()`（`@/lib/supabase/server`）。認証は `supabase.auth.getSession()`、テーブルは `.from('table').select/insert/update`。エラーは `NextResponse.json(..., { status })` で返す。
-- クライアント側の fetch は `lib/api.ts` の関数経由で、その中で `@/lib/supabase` のブラウザクライアントを使用。
+- **エントリ**: `src/middleware.ts` は `src/` 直下。
+- **テスト**: `*.test.ts` / `*.test.tsx`（例: `lib/calculator/priceCalculator.test.ts`, `lib/geo/areaCalculator.test.ts`, `services/booking.service.test.ts`）。E2E は Playwright。
+
+---
+
+## 2. 技術スタック
+
+- **Runtime**: Node.js, Next.js 14, React 18。
+- **パス**: `tsconfig.json` の `baseUrl: "."`, `paths: { "@/*": ["./src/*"] }`。import は必ず `@/` で統一。
+- **Supabase**: ORM なし。`@supabase/ssr` + `@supabase/supabase-js` で直接利用。
+  - ブラウザ: `@/lib/supabase` の `createBrowserClient` インスタンス（`supabase` を export）。
+  - サーバー（Route Handler / Server Components）: `@/lib/supabase/server` の `createClient()` を await して利用。cookies 経由でセッション共有。
+  - middleware: `@supabase/ssr` の `createServerClient` を直接使い、cookies を自前で get/set/remove。
+- **UI**: Tailwind CSS, `class-variance-authority` (cva), `clsx` + `tailwind-merge`。`cn()` は `@/lib/utils` から提供。Radix（dialog, progress, slot）, Lucide, Sonner。
+- **地図・Geo**: Leaflet, react-leaflet, leaflet-draw, @turf/turf。型は `@/types/leaflet-images.d.ts`, `@/types/turf.d.ts`。
+- **その他**: FullCalendar（core, daygrid, list, timegrid, react）, TanStack React Table。テスト: Vitest（単体）, Playwright（E2E）。型生成: `npm run gen:types`（Supabase → `src/types/database.types.ts`）。
+
+---
+
+## 3. Supabase Auth / RLS を扱う際の注意点
+
+### 3.1 認証クライアントの使い分け
+
+- **Route Handler / Server Components**: 必ず `const supabase = await createClient()`（`@/lib/supabase/server`）。認証状態は `supabase.auth.getSession()` で取得。
+- **クライアントコンポーネント・ブラウザ**: `@/lib/supabase` の `supabase` を使用。データ取得や書き込みは `lib/api.ts` の関数経由で services を呼び、その中でこのクライアントを渡す。
+- **middleware**: `createServerClient` で cookies を読み書きし、`getSession()` でリダイレクト判定（未ログイン → `/login`, ロールに応じて `/admin` / `/provider` / `/` 等）。public ルートは `['/login', '/auth/callback', '/auth/verified', '/auth/pending-approval']`。
+
+### 3.2 RLS の前提（このプロジェクトの設計）
+
+- **ユーザー識別**: `auth.uid()` は使わず、**メールで `public.users` と紐付ける**。RLS では「現在ユーザーの id」を `(select id from public.users where email = auth.jwt() ->> 'email' limit 1)` で取得するパターンを統一。
+- **権限付与**: 各テーブルで RLS を有効にする前に、`grant select, insert, update ... on public.<table> to authenticated;` を実行する。
+- **ポリシー例**:
+  - **users**: 自分の行のみ SELECT/INSERT/UPDATE（`(auth.jwt() ->> 'email') = email`）。
+  - **fields**: 農家は自分の `farmer_id` の行のみ CRUD。
+  - **campaigns**: 業者は自分の `provider_id`、admin は全件。
+  - **bookings**: 農家は自分の申し込み、業者は自案件の申し込み、admin は全件。INSERT は `farmer_id` が自分または null（未ログイン申し込み想定）。
+  - **masters**: provider は `provider_id = self or null`、admin は全件。
+  - **work_requests**: 農家は自分の依頼、業者は自分あての依頼のみ。
+- **ストアド関数**: 招待コード紐付け等で `auth.jwt() ->> 'email'` を使う関数がある。RLS 追加・変更時は既存 migration のポリシー名と `to authenticated` / `using` / `with check` を踏襲する。
+
+### 3.3 開発時の注意
+
+- 新規テーブルに RLS を張る場合は、必ず先に `grant ... to authenticated`（または `anon` が必要なら別途検討）。
+- ポリシーは「誰がどの行を see/edit できるか」を `public.users` の `role` と `id` と組み合わせて明示する。`auth.uid()` と `users.id` は一致しないため、`auth.jwt() ->> 'email'` と `users.email` で紐付ける。
+
+---
+
+## 4. Node.js API（Route Handler）のレスポンス形式
+
+### 4.1 推奨: 共通 JSON フォーマット
+
+- **成功時**: `{ success: true, ...data }`。必要に応じて `data` または payload のキー（例: `result`, `reportId`, `finalAmount`, `bookingId`）をそのまま並べる。
+  - 例: `NextResponse.json({ success: true, result })` または `NextResponse.json({ success: true, reportId, finalAmount })`。
+- **失敗時**: `{ success: false, message: string }`。HTTP ステータスは 400 / 401 / 403 / 404 / 500 等を適切に設定。
+  - 例: `NextResponse.json({ success: false, message: '未ログインです' }, { status: 401 })`。
+- クライアントでは `response.ok` と body の `success` を両方見てよく、エラー表示には `message` を使う。
+
+### 4.2 既存コードとの整合
+
+- **認証必須 API**（例: `api/campaigns/calculate`, `api/provider/reports/submit`）は上記に準拠（`success: true/false`, `message`）。
+- **geocode** のように単純なユーティリティ API では、成功時は `{ lat, lng, displayName }`、失敗時は `{ error: string }` のみの形式もある。新規 API では可能な限り `success` + `message`（または `data`）に揃えるとよい。
+
+### 4.3 サービス層の返り値
+
+- services（`booking.service`, `report.service`, `campaign.service` 等）は `{ success: boolean; error?: string }` や `{ success: boolean; message?: string; reportId?: string; finalAmount?: number }` のような形で返す。Route Handler はこの返り値をそのまま JSON に載せたり、`message` にマッピングしたりする。
+
+---
+
+## 5. パターンまとめ
+
+- **データ取得**: クライアントは `@/lib/api` の `fetchProjects`, `fetchBookingsByFarmer`, `getCurrentUser` 等を利用。内部で `@/lib/supabase` のクライアントと `@/services/*` を利用。
+- **マスタ**: `@/lib/masters` の `fetchMasters`, `createMaster` 等。Repository 名は使わない。
+- **名前付け**: データ層は `fetch*`, `create*`, `update*` 等。ページは `page.tsx`、API は `route.ts`。
+- **エラー返却**: Route Handler では `NextResponse.json({ success: false, message }, { status })` で統一することを推奨。
+
+---
+
+## 6. 参照
+
+- デザイン・UX・マイクロコピー: `.cursor/rules/design-ux-tech-tier.mdc` を参照。
+- GitHub 連携・コミット前の `npm run build` 確認: `.cursor/rules/github-sync.mdc` を参照。

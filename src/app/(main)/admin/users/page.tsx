@@ -15,6 +15,7 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import AppLoader from '@/components/AppLoader';
+import { formatDateWithWeekday } from '@/lib/dateFormat';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface PendingUser {
@@ -58,35 +59,20 @@ export default function AdminUsersPage() {
     setPendingUsers((data as PendingUser[]) || []);
   };
 
-  const loadLinkedFarmers = async (providerId: string) => {
-    const { data: links, error: linkError } = await supabase
-      .from('farmer_providers')
-      .select('farmer_id, created_at')
-      .eq('provider_id', providerId)
-      .eq('status', 'active');
-    if (linkError || !links?.length) {
+  const loadLinkedFarmers = async () => {
+    const { data, error } = await supabase.rpc('get_linked_farmers_for_current_provider');
+    if (error) {
+      console.error('get_linked_farmers_for_current_provider:', error);
       setLinkedFarmers([]);
       return;
     }
-    const farmerIds = links.map((l) => l.farmer_id);
-    const { data: users, error: userError } = await supabase
-      .from('users')
-      .select('id, name, email')
-      .in('id', farmerIds);
-    if (userError) {
-      setLinkedFarmers([]);
-      return;
-    }
-    const byId = new Map((users || []).map((u) => [u.id, u]));
-    const list: LinkedFarmer[] = links.map((l) => {
-      const u = byId.get(l.farmer_id);
-      return {
-        farmer_id: l.farmer_id,
-        name: u?.name ?? '—',
-        email: u?.email ?? '—',
-        created_at: l.created_at ?? '',
-      };
-    });
+    const raw = (data as LinkedFarmer[] | null) ?? [];
+    const list: LinkedFarmer[] = raw.map((r) => ({
+      farmer_id: r.farmer_id,
+      name: r.name ?? '—',
+      email: r.email ?? '—',
+      created_at: typeof r.created_at === 'string' ? r.created_at : (r.created_at ? String(r.created_at) : ''),
+    }));
     setLinkedFarmers(list);
   };
 
@@ -96,7 +82,7 @@ export default function AdminUsersPage() {
     if (user.role === 'admin') {
       loadPending().finally(() => setRefreshing(false));
     } else if (user.role === 'provider') {
-      loadLinkedFarmers(user.id).finally(() => setRefreshing(false));
+      loadLinkedFarmers().finally(() => setRefreshing(false));
     } else {
       setRefreshing(false);
     }
@@ -111,7 +97,7 @@ export default function AdminUsersPage() {
       {
         id: 'created_at',
         header: '登録日',
-        accessorFn: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString('ja-JP') : '—',
+        accessorFn: (r) => formatDateWithWeekday(r.created_at),
         enableSorting: true,
       },
       {
@@ -150,7 +136,7 @@ export default function AdminUsersPage() {
       {
         id: 'created_at',
         header: '紐付け日',
-        accessorFn: (r) => (r.created_at ? new Date(r.created_at).toLocaleDateString('ja-JP') : '—'),
+        accessorFn: (r) => formatDateWithWeekday(r.created_at),
         enableSorting: true,
       },
     ],

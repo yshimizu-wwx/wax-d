@@ -1327,6 +1327,7 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_linked_farmers_for_current_provider: { Args: Record<string, never>; Returns: Json }
       get_linked_providers_for_current_farmer: { Args: Record<string, never>; Returns: Json }
       gettransactionid: { Args: never; Returns: unknown }
       link_farmer_by_invitation_code: { Args: { p_invitation_code: string }; Returns: Json }

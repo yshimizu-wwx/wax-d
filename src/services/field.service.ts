@@ -14,6 +14,7 @@ export interface FieldCreateInput {
   area_size?: number;
   lat?: number;
   lng?: number;
+  area_coordinates?: unknown;
 }
 
 export interface FieldUpdateInput {
@@ -22,6 +23,7 @@ export interface FieldUpdateInput {
   area_size?: number;
   lat?: number;
   lng?: number;
+  area_coordinates?: unknown;
 }
 
 /**
@@ -61,6 +63,7 @@ export async function createField(
         area_size: input.area_size ?? null,
         lat: input.lat ?? null,
         lng: input.lng ?? null,
+        area_coordinates: input.area_coordinates ?? null,
       })
       .select('id')
       .single();
@@ -91,6 +94,7 @@ export async function updateField(
   if (data.area_size !== undefined) payload.area_size = data.area_size;
   if (data.lat !== undefined) payload.lat = data.lat;
   if (data.lng !== undefined) payload.lng = data.lng;
+  if (data.area_coordinates !== undefined) payload.area_coordinates = data.area_coordinates;
 
   const { error } = await supabase.from('fields').update(payload).eq('id', fieldId);
   if (error) {
