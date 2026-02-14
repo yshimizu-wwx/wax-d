@@ -120,6 +120,8 @@ export interface WorkRequest {
     task_detail_free_text?: string | null;
     desired_price?: number | null;
     target_area_polygon?: string | null;
+    /** 依頼対象の圃場ID一覧（複数選択可） */
+    field_ids?: string[] | null;
     created_at?: string;
 }
 

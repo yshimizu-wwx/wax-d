@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Sprout, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Sprout, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
 import {
@@ -14,7 +15,9 @@ import {
   type FieldData,
 } from '@/lib/api';
 import type { Field } from '@/types/database';
+import type { Polygon } from 'geojson';
 import { getPolygonCenter } from '@/lib/geo/areaCalculator';
+import { stripJapanFromDisplayAddress } from '@/lib/geo/addressFormat';
 import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +29,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 
@@ -50,6 +54,8 @@ export default function MyFieldsPage() {
   const [formAreaSize, setFormAreaSize] = useState<string>('');
   const [formLat, setFormLat] = useState<number | null>(null);
   const [formLng, setFormLng] = useState<number | null>(null);
+  const [formPolygon, setFormPolygon] = useState<Polygon | null>(null);
+  const [addressFromMap, setAddressFromMap] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -79,13 +85,15 @@ export default function MyFieldsPage() {
     setFormAreaSize('');
     setFormLat(null);
     setFormLng(null);
+    setFormPolygon(null);
+    setAddressFromMap(false);
     setShowForm(true);
   };
 
   const openEdit = (f: Field) => {
     setEditingId(f.id);
     setFormName(f.name || '');
-    setFormAddress(f.address || '');
+    setFormAddress(stripJapanFromDisplayAddress(f.address) || '');
     setFormAreaSize(f.area_size != null ? String(f.area_size) : '');
     setShowForm(true);
   };
@@ -96,28 +104,47 @@ export default function MyFieldsPage() {
   };
 
   const handlePolygonComplete = useCallback(
-    async (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: import('geojson').Polygon | null) => {
+    async (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: Polygon | null) => {
       if (polygon && area10r > 0) {
         // 面積は小数点第1位まで（Issue #16）
         const areaRounded = Math.round(area10r * 10) / 10;
         setFormAreaSize(String(areaRounded));
+        setFormPolygon(polygon);
         const [lng, lat] = getPolygonCenter(polygon);
         setFormLat(lat);
         setFormLng(lng);
-        // 逆ジオコードで住所・デフォルト名称をセット（Issue #16）
+        // 逆ジオコードで住所・デフォルト名称をセット（Issue #16）。失敗時はメッセージ表示せず空のまま
         const rev = await reverseGeocodeViaApi(lat, lng);
         if (rev?.displayName) {
           setFormAddress(rev.displayName);
           setFormName(`${rev.displayName} 畑`);
+          setAddressFromMap(true);
         }
       } else {
         setFormAreaSize('');
         setFormLat(null);
         setFormLng(null);
+        setFormPolygon(null);
       }
     },
     []
   );
+
+  const handleAddressSearchResult = useCallback((address: string | undefined, lat: number, lng: number) => {
+    if (address) setFormAddress(address);
+    setFormLat(lat);
+    setFormLng(lng);
+    setAddressFromMap(!!address);
+  }, []);
+
+  const handleFetchAddressFromMap = useCallback(async () => {
+    if (formLat == null || formLng == null) return;
+    const rev = await reverseGeocodeViaApi(formLat, formLng);
+    if (rev?.displayName) {
+      setFormAddress(rev.displayName);
+      setAddressFromMap(true);
+    }
+  }, [formLat, formLng]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,9 +156,16 @@ export default function MyFieldsPage() {
     setSubmitting(true);
     try {
       if (editingId) {
+        const editingField = fields.find((f) => f.id === editingId);
+        // 緯度経度がある場合は逆ジオコードで取得した正確な住所を反映
+        let addressToSave = formAddress || undefined;
+        if (editingField?.lat != null && editingField?.lng != null) {
+          const rev = await reverseGeocodeViaApi(editingField.lat, editingField.lng);
+          if (rev?.displayName) addressToSave = rev.displayName;
+        }
         const result = await updateField(editingId, {
           name: formName || undefined,
-          address: formAddress || undefined,
+          address: addressToSave,
           area_size: formAreaSize ? Number(formAreaSize) : undefined,
         });
         if (result.success) {
@@ -142,13 +176,25 @@ export default function MyFieldsPage() {
           toast.error(result.error);
         }
       } else {
+        // 範囲（ポリゴン）を登録する場合は、中心ピン（緯度経度）も範囲の中心で必ずセットで記録（業者のルート・ナビで使用）
+        const centerFromPolygon = formPolygon && formPolygon.coordinates[0]?.length >= 3
+          ? getPolygonCenter(formPolygon)
+          : null;
+        const [centerLng, centerLat] = centerFromPolygon ?? [formLng ?? null, formLat ?? null];
+        // 緯度経度がある場合は逆ジオコードで取得した正確な住所を反映
+        let addressToSave = formAddress || undefined;
+        if (centerLat != null && centerLng != null) {
+          const rev = await reverseGeocodeViaApi(centerLat, centerLng);
+          if (rev?.displayName) addressToSave = rev.displayName;
+        }
         const data: FieldData = {
           farmer_id: user.id,
           name: formName.trim() || undefined,
-          address: formAddress || undefined,
+          address: addressToSave,
           area_size: formAreaSize ? Number(formAreaSize) : undefined,
-          lat: formLat ?? undefined,
-          lng: formLng ?? undefined,
+          lat: centerLat ?? formLat ?? undefined,
+          lng: centerLng ?? formLng ?? undefined,
+          area_coordinates: formPolygon ?? undefined,
         };
         const result = await createField(data);
         if (result.success) {
@@ -226,10 +272,15 @@ export default function MyFieldsPage() {
             <ul className="divide-y divide-dashboard-border">
               {fields.map((f) => (
                 <li key={f.id} className="p-4 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-dashboard-text">{f.name || '（名称未設定）'}</p>
-                    <p className="text-sm text-dashboard-muted">
-                      {f.address && `${f.address} · `}
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/my-fields/${f.id}/map`}
+                      className="font-bold text-dashboard-text text-agrix-forest hover:underline focus:outline-none focus:ring-2 focus:ring-agrix-forest/50 rounded"
+                    >
+                      {f.name || '（名称未設定）'}
+                    </Link>
+                    <p className="text-sm text-dashboard-muted mt-0.5">
+                      {f.address && `${stripJapanFromDisplayAddress(f.address)} · `}
                       {f.area_size != null && `${f.area_size} 反`}
                     </p>
                   </div>
@@ -259,67 +310,93 @@ export default function MyFieldsPage() {
         </Card>
 
         <Dialog open={showForm} onOpenChange={(open) => !open && closeForm()}>
-          <DialogContent className={!editingId ? 'max-w-2xl max-h-[90vh] overflow-hidden flex flex-col' : ''}>
-            <DialogHeader>
+          <DialogContent className={!editingId ? 'max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0' : ''}>
+            <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
               <DialogTitle>{editingId ? '畑を編集' : '畑を登録'}</DialogTitle>
+              <DialogDescription className="sr-only">
+                {editingId ? '畑の情報を編集します。' : '地図で範囲を選択し、畑の名前と住所を入力して登録します。'}
+              </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 flex flex-col min-h-0">
-              {!editingId && (
-                <div className="space-y-1 shrink-0">
-                  <Label>地図で範囲を選択</Label>
-                  <p className="text-xs text-dashboard-muted">地図上でポリゴン（多角形）を描くと面積が自動計算されます。</p>
-                  <div className="w-full min-h-[280px] rounded-lg overflow-hidden border border-dashboard-border">
-                    <PolygonMap
-                      onPolygonComplete={handlePolygonComplete}
-                      initialCenter={
-                        user && user.lat != null && user.lng != null
-                          ? [user.lat, user.lng]
-                          : undefined
-                      }
-                      initialAddress={
-                        user && (user.lat == null || user.lng == null) && user.address
-                          ? user.address
-                          : undefined
-                      }
-                      showAddressSearch
-                    />
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 flex overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-4">
+                {!editingId && (
+                  <div className="space-y-1 shrink-0">
+                    <Label>地図で範囲を選択</Label>
+                    <p className="text-xs text-dashboard-muted">地図上でポリゴン（多角形）を描くと面積が自動計算されます。</p>
+                    <div className="w-full min-h-[280px] rounded-lg overflow-hidden border border-dashboard-border">
+                      <PolygonMap
+                        onPolygonComplete={handlePolygonComplete}
+                        onAddressSearchResult={handleAddressSearchResult}
+                        initialCenter={
+                          user && user.lat != null && user.lng != null
+                            ? [user.lat, user.lng]
+                            : undefined
+                        }
+                        initialAddress={
+                          user && (user.lat == null || user.lng == null) && user.address
+                            ? user.address
+                            : undefined
+                        }
+                        showAddressSearch
+                      />
+                    </div>
                   </div>
+                )}
+                <div>
+                  <Label htmlFor="fieldName">畑の名前</Label>
+                  <Input
+                    id="fieldName"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="例: 北側水田"
+                    className="mt-1 bg-white text-slate-900 border-slate-200 placeholder:text-slate-500 focus-visible:ring-agrix-forest"
+                  />
                 </div>
-              )}
-              <div>
-                <Label htmlFor="fieldName">畑の名前</Label>
-                <Input
-                  id="fieldName"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="例: 北側水田"
-                  className="mt-1"
-                />
+                <div>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <Label htmlFor="fieldAddress" className="shrink-0">住所・場所</Label>
+                    {!editingId && formLat != null && formLng != null && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleFetchAddressFromMap}
+                        className="shrink-0 text-agrix-forest hover:text-agrix-forest-dark hover:bg-agrix-forest/10 h-8 text-xs"
+                      >
+                        <MapPin className="w-3.5 h-3.5 mr-1" />
+                        地図から取得
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="fieldAddress"
+                    value={formAddress}
+                    onChange={(e) => {
+                      setFormAddress(e.target.value);
+                      setAddressFromMap(false);
+                    }}
+                    placeholder="例: 〇〇県〇〇市..."
+                    className={`mt-1 transition-all duration-200 bg-white text-slate-900 border-slate-200 placeholder:text-slate-500 focus-visible:ring-agrix-forest focus-visible:border-slate-300 ${addressFromMap ? 'ring-1 ring-agrix-forest/50 bg-agrix-forest/10 border-agrix-forest/30' : ''}`}
+                  />
+                  {addressFromMap && (
+                    <p className="mt-1 text-xs text-agrix-forest">地図から取得済み。必要に応じて編集できます。</p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="fieldArea">面積（反）</Label>
+                  <Input
+                    id="fieldArea"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={formAreaSize}
+                    onChange={(e) => setFormAreaSize(e.target.value)}
+                    placeholder={editingId ? '例: 5.5' : '地図で描画すると自動入力'}
+                    className="mt-1 bg-white text-slate-900 border-slate-200 placeholder:text-slate-500 focus-visible:ring-agrix-forest"
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="fieldAddress">住所・場所</Label>
-                <Input
-                  id="fieldAddress"
-                  value={formAddress}
-                  onChange={(e) => setFormAddress(e.target.value)}
-                  placeholder="例: 〇〇県〇〇市..."
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="fieldArea">面積（反）</Label>
-                <Input
-                  id="fieldArea"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={formAreaSize}
-                  onChange={(e) => setFormAreaSize(e.target.value)}
-                  placeholder={editingId ? '例: 5.5' : '地図で描画すると自動入力'}
-                  className="mt-1"
-                />
-              </div>
-              <DialogFooter className="shrink-0">
+              <DialogFooter className="shrink-0 px-6 py-4 border-t border-dashboard-border bg-dashboard-card/50">
                 <Button type="button" variant="outline" onClick={closeForm}>
                   キャンセル
                 </Button>
@@ -335,6 +412,7 @@ export default function MyFieldsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>畑を削除しますか？</DialogTitle>
+              <DialogDescription>この操作は取り消せません。</DialogDescription>
             </DialogHeader>
             <p className="text-sm text-dashboard-muted">この操作は取り消せません。</p>
             <DialogFooter>

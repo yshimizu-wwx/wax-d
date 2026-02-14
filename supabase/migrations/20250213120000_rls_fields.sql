@@ -6,7 +6,8 @@ grant select, insert, update, delete on public.fields to authenticated;
 
 alter table public.fields enable row level security;
 
--- 自分の畑のみ SELECT 可能（farmer_id = ログインユーザーの id）
+-- 1. SELECT ポリシー
+drop policy if exists "fields_select_own" on public.fields;
 create policy "fields_select_own"
   on public.fields for select
   to authenticated
@@ -14,7 +15,8 @@ create policy "fields_select_own"
     farmer_id = (select id from public.users where email = auth.jwt() ->> 'email' limit 1)
   );
 
--- 自分の farmer_id でのみ INSERT 可能（畑登録）
+-- 2. INSERT ポリシー
+drop policy if exists "fields_insert_own" on public.fields;
 create policy "fields_insert_own"
   on public.fields for insert
   to authenticated
@@ -22,7 +24,8 @@ create policy "fields_insert_own"
     farmer_id = (select id from public.users where email = auth.jwt() ->> 'email' limit 1)
   );
 
--- 自分の畑のみ UPDATE 可能
+-- 3. UPDATE ポリシー
+drop policy if exists "fields_update_own" on public.fields;
 create policy "fields_update_own"
   on public.fields for update
   to authenticated
@@ -33,7 +36,8 @@ create policy "fields_update_own"
     farmer_id = (select id from public.users where email = auth.jwt() ->> 'email' limit 1)
   );
 
--- 自分の畑のみ DELETE 可能
+-- 4. DELETE ポリシー
+drop policy if exists "fields_delete_own" on public.fields;
 create policy "fields_delete_own"
   on public.fields for delete
   to authenticated

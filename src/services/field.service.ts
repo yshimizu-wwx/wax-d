@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Field } from '@/types/database';
+import { toUserFriendlyError } from '@/lib/errorMessage';
 
 export interface FieldCreateInput {
   farmer_id: string;
@@ -13,6 +14,7 @@ export interface FieldCreateInput {
   area_size?: number;
   lat?: number;
   lng?: number;
+  area_coordinates?: unknown;
 }
 
 export interface FieldUpdateInput {
@@ -21,6 +23,7 @@ export interface FieldUpdateInput {
   area_size?: number;
   lat?: number;
   lng?: number;
+  area_coordinates?: unknown;
 }
 
 /**
@@ -44,38 +47,36 @@ export async function fetchFieldsByFarmer(
 }
 
 /**
- * Creates a new field. ID generated with prefix F_ (GAS-style).
+ * Creates a new field. ID は DB の UUID デフォルト（gen_random_uuid()）に任せる。
  */
 export async function createField(
   supabase: SupabaseClient,
   input: FieldCreateInput
 ): Promise<{ success: boolean; error?: string; fieldId?: string }> {
   try {
-    const id = `F_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const { data: row, error } = await supabase
       .from('fields')
       .insert({
-        id,
         farmer_id: input.farmer_id,
         name: input.name ?? null,
         address: input.address ?? null,
         area_size: input.area_size ?? null,
         lat: input.lat ?? null,
         lng: input.lng ?? null,
+        area_coordinates: input.area_coordinates ?? null,
       })
       .select('id')
       .single();
 
     if (error) {
       console.error('Error creating field:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: toUserFriendlyError(error.message) };
     }
-    return { success: true, fieldId: row?.id ?? id };
+    return { success: true, fieldId: row?.id ?? undefined };
   } catch (e) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : 'Unknown error',
-    };
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    console.error('Error creating field:', e);
+    return { success: false, error: toUserFriendlyError(message) };
   }
 }
 
@@ -93,11 +94,12 @@ export async function updateField(
   if (data.area_size !== undefined) payload.area_size = data.area_size;
   if (data.lat !== undefined) payload.lat = data.lat;
   if (data.lng !== undefined) payload.lng = data.lng;
+  if (data.area_coordinates !== undefined) payload.area_coordinates = data.area_coordinates;
 
   const { error } = await supabase.from('fields').update(payload).eq('id', fieldId);
   if (error) {
     console.error('Error updating field:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: toUserFriendlyError(error.message) };
   }
   return { success: true };
 }
@@ -112,7 +114,7 @@ export async function deleteField(
   const { error } = await supabase.from('fields').delete().eq('id', fieldId);
   if (error) {
     console.error('Error deleting field:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: toUserFriendlyError(error.message) };
   }
   return { success: true };
 }

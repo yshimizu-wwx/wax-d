@@ -16,6 +16,7 @@ import {
   Send,
   MapPin,
   FolderKanban,
+  Inbox,
   ListTodo,
   Settings,
 } from "lucide-react";
@@ -40,6 +41,7 @@ function getNavItems(role: string): NavItem[] {
   }
   if (role === "provider") {
     items.push({ href: "/provider/projects", label: "案件", icon: FolderKanban });
+    items.push({ href: "/provider/requests", label: "受信した依頼", icon: Inbox });
     items.push({ href: "/provider/tasks", label: "作業", icon: ListTodo });
     items.push({ href: "/provider/billings", label: "請求", icon: Receipt });
     items.push({ href: "/provider/settings", label: "設定", icon: Settings });

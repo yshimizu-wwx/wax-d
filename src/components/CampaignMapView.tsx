@@ -73,7 +73,7 @@ export default function CampaignMapView({
     >
       <TileLayer
         attribution='&copy; <a href="https://www.google.com/maps">Google</a>'
-        url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+        url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=ja"
         maxZoom={20}
       />
       <FitBounds campaigns={campaigns} fields={fields} />
@@ -88,20 +88,20 @@ export default function CampaignMapView({
             key={campaign.id}
             positions={positions}
             pathOptions={{
-              color: isHighlighted ? '#1A4731' : '#2d5a3d',
-              fillColor: isHighlighted ? '#1A4731' : '#3d7a52',
-              fillOpacity: isHighlighted ? 0.35 : 0.2,
-              weight: isHighlighted ? 4 : 2,
+              color: isHighlighted ? '#1A4731' : '#1e5c38',
+              fillColor: isHighlighted ? '#1A4731' : '#2d7a4a',
+              fillOpacity: isHighlighted ? 0.5 : 0.45,
+              weight: isHighlighted ? 4 : 3,
             }}
             eventHandlers={{
               click: () => {},
             }}
           >
-            <Popup>
-              <span className="font-bold text-dashboard-text">
+            <Popup className="leaflet-popup-agrix">
+              <span className="font-bold text-neutral-900">
                 {(campaign as { campaign_title?: string }).campaign_title || campaign.location}
               </span>
-              {campaign.location && <p className="text-sm text-dashboard-muted mt-1">{campaign.location}</p>}
+              {campaign.location && <p className="text-sm text-neutral-600 mt-1">{campaign.location}</p>}
             </Popup>
           </Polygon>
         );
@@ -111,9 +111,9 @@ export default function CampaignMapView({
         if (field.lat == null || field.lng == null) return null;
         return (
           <Marker key={field.id} position={[field.lat, field.lng]}>
-            <Popup>
-              <span className="font-bold text-dashboard-text">{field.name || '（畑）'}</span>
-              {field.address && <p className="text-sm text-dashboard-muted mt-1">{field.address}</p>}
+            <Popup className="leaflet-popup-agrix">
+              <span className="font-bold text-neutral-900">{field.name || '（畑）'}</span>
+              {field.address && <p className="text-sm text-neutral-600 mt-1">{field.address}</p>}
             </Popup>
           </Marker>
         );

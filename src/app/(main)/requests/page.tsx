@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { FileText, Send, Sprout } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ import type { WorkRequest, Field } from '@/types/database';
 import type { LinkedProvider } from '@/lib/api';
 import AppLoader from '@/components/AppLoader';
 import WorkRequestForm from '@/components/WorkRequestForm';
+import { formatDateWithWeekday, formatDateTimeWithWeekday } from '@/lib/dateFormat';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -26,8 +27,9 @@ const statusLabel: Record<string, string> = {
   rejected: 'お断り',
 };
 
-export default function RequestsPage() {
+function RequestsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<WorkRequest[]>([]);
@@ -41,11 +43,33 @@ export default function RequestsPage() {
     });
   }, []);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (!user || user.role !== 'farmer') return;
     fetchWorkRequestsByFarmer(user.id).then(setRequests);
     fetchFieldsByFarmer(user.id).then(setFields);
     fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+  }, [user]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // マイページで紐づけした直後に ?linked=1 で遷移してきた場合、紐付き業者を確実に再取得
+  useEffect(() => {
+    if (!user || user.role !== 'farmer' || searchParams.get('linked') !== '1') return;
+    const refetch = () => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    refetch();
+    const t = window.setTimeout(refetch, 400);
+    router.replace('/requests', { scroll: false });
+    return () => window.clearTimeout(t);
+  }, [user, searchParams, router]);
+
+  // 他タブで紐づけしたあとこのタブに戻ったときに再取得する
+  useEffect(() => {
+    if (!user || user.role !== 'farmer') return;
+    const onFocus = () => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [user]);
 
   useEffect(() => {
@@ -119,6 +143,14 @@ export default function RequestsPage() {
               fields={fields}
               linkedProviders={linkedProviders}
               onSubmit={handleSubmit}
+              onRefetchRequested={async () => {
+                const list = await fetchLinkedProvidersForFarmer(user.id);
+                setLinkedProviders(list);
+                toast.success('確認しました');
+                if (list.length === 0) {
+                  toast.info('紐付いた業者が表示されません。一度ログアウトして再ログインするか、招待コードをマイページで再度入力してみてください。');
+                }
+              }}
             />
           )}
         </section>
@@ -145,11 +177,11 @@ export default function RequestsPage() {
                         </p>
                         <p className="text-sm text-dashboard-muted">
                           {r.location && `${r.location} · `}
-                          希望: {r.desired_start_date || '未定'} ～ {r.desired_end_date || '未定'}
+                          希望: {formatDateWithWeekday(r.desired_start_date, '未定')} ～ {formatDateWithWeekday(r.desired_end_date, '未定')}
                           {r.estimated_area_10r != null && ` · ${r.estimated_area_10r} 反`}
                         </p>
                         <p className="text-xs text-dashboard-muted mt-1">
-                          {r.created_at && new Date(r.created_at).toLocaleString('ja-JP')}
+                          {r.created_at && formatDateTimeWithWeekday(r.created_at)}
                           {' · '}
                           <span className={r.status === 'converted' ? 'text-agrix-forest font-medium' : r.status === 'rejected' ? 'text-red-600' : ''}>
                             {statusLabel[r.status] || r.status}
@@ -165,5 +197,17 @@ export default function RequestsPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function RequestsPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-full flex items-center justify-center">
+        <AppLoader message="読み込み中..." />
+      </main>
+    }>
+      <RequestsPageContent />
+    </Suspense>
   );
 }

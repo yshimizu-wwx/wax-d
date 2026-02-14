@@ -53,6 +53,79 @@ export async function fetchOpenCampaigns(supabase: SupabaseClient): Promise<Proj
   return data ?? [];
 }
 
+export type CampaignStatusFilter = 'open' | 'closed' | 'completed' | 'past' | 'all';
+
+export interface FetchCampaignsOptions {
+  /** open=募集中のみ, closed=募集終了, completed=完了, past=過去(closed+completed), all=すべて */
+  status?: CampaignStatusFilter;
+  /** 作業開始日の下限（YYYY-MM-DD）。指定時は start_date >= dateFrom の案件のみ */
+  dateFrom?: string;
+  /** 作業終了日の上限（YYYY-MM-DD）。指定時は end_date <= dateTo の案件のみ */
+  dateTo?: string;
+  /** 指定時はその業者の案件のみ取得（農家が業者を選んだとき用） */
+  providerId?: string;
+}
+
+/**
+ * 案件一覧用: ステータス・日付でフィルタ可能に取得。
+ */
+export async function fetchCampaigns(
+  supabase: SupabaseClient,
+  options: FetchCampaignsOptions = {}
+): Promise<Project[]> {
+  const { status = 'all', dateFrom, dateTo, providerId } = options;
+  let query = supabase.from('campaigns').select('*');
+
+  if (providerId) {
+    query = query.eq('provider_id', providerId);
+  }
+
+  if (status !== 'all') {
+    if (status === 'open') {
+      query = query.eq('status', 'open').eq('is_closed', false);
+    } else if (status === 'past') {
+      query = query.in('status', ['closed', 'completed']);
+    } else {
+      query = query.eq('status', status);
+    }
+  }
+
+  if (dateFrom) {
+    query = query.gte('start_date', dateFrom);
+  }
+  if (dateTo) {
+    query = query.lte('end_date', dateTo);
+  }
+
+  query = query.order('created_at', { ascending: false });
+  const { data, error } = await query;
+  if (error) {
+    console.error('Error fetching campaigns:', error);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
+ * Fetches a single campaign by ID. If providerId is set, only returns the campaign if it belongs to that provider.
+ */
+export async function fetchCampaignById(
+  supabase: SupabaseClient,
+  campaignId: string,
+  providerId?: string
+): Promise<Project | null> {
+  let query = supabase
+    .from('campaigns')
+    .select('*')
+    .eq('id', campaignId);
+  if (providerId) {
+    query = query.eq('provider_id', providerId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+  return data as Project;
+}
+
 /**
  * Fetches the single active project (open, not closed). Returns null if none.
  */
@@ -212,6 +285,7 @@ export async function closeCampaign(
 
 /**
  * Sets campaign status to 'completed'.
+ * @deprecated 作業確定は setWorkConfirmBulk / setWorkConfirmIndividual を使用してください。
  */
 export async function setCampaignCompleted(
   supabase: SupabaseClient,
@@ -223,4 +297,201 @@ export async function setCampaignCompleted(
     .eq('id', campaignId);
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+/**
+ * 作業確定（一斉）: 案件に作業日を1日設定し、全申込にその日付を通知する。
+ * campaign.final_date と 全 bookings.confirmed_date を設定し、status を completed にする。
+ */
+export async function setWorkConfirmBulk(
+  supabase: SupabaseClient,
+  campaignId: string,
+  finalDate: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error: campaignErr } = await supabase
+    .from('campaigns')
+    .update({ final_date: finalDate, status: 'completed' })
+    .eq('id', campaignId);
+  if (campaignErr) return { success: false, error: campaignErr.message };
+
+  const { error: bookingsErr } = await supabase
+    .from('bookings')
+    .update({ confirmed_date: finalDate })
+    .eq('campaign_id', campaignId)
+    .neq('status', 'canceled');
+  if (bookingsErr) return { success: false, error: bookingsErr.message };
+  return { success: true };
+}
+
+/**
+ * 作業確定（個別）: 各申込に日付（と時間）を設定する。
+ * updates の bookingId に対応する confirmed_date を更新し、案件 status を completed にする。
+ * 通知は「同じ農家の複数申込」をまとめて1回だけ送る（農家ごとに1回通知）。
+ */
+export async function setWorkConfirmIndividual(
+  supabase: SupabaseClient,
+  campaignId: string,
+  updates: { bookingId: string; confirmedDate: string }[]
+): Promise<{ success: boolean; error?: string }> {
+  for (const u of updates) {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ confirmed_date: u.confirmedDate })
+      .eq('id', u.bookingId)
+      .eq('campaign_id', campaignId);
+    if (error) return { success: false, error: error.message };
+  }
+  const { error } = await supabase
+    .from('campaigns')
+    .update({ status: 'completed' })
+    .eq('id', campaignId);
+  if (error) return { success: false, error: error.message };
+
+  // 同じ農家は1回だけ通知する: 農家IDごとにグループ化してから通知処理を呼ぶ
+  const bookingIds = updates.map((u) => u.bookingId);
+  if (bookingIds.length > 0) {
+    const { data: rows } = await supabase
+      .from('bookings')
+      .select('id, farmer_id')
+      .eq('campaign_id', campaignId)
+      .in('id', bookingIds);
+    const updatesById = new Map(updates.map((u) => [u.bookingId, u.confirmedDate]));
+    const byFarmer = new Map<string, { bookingId: string; confirmedDate: string }[]>();
+    for (const row of rows ?? []) {
+      const fid = (row as { id: string; farmer_id: string | null }).farmer_id ?? '__guest__';
+      const list = byFarmer.get(fid) ?? [];
+      const date = updatesById.get((row as { id: string }).id);
+      if (date) list.push({ bookingId: (row as { id: string }).id, confirmedDate: date });
+      byFarmer.set(fid, list);
+    }
+    await notifyFarmersWorkConfirmed(supabase, campaignId, byFarmer);
+  }
+  return { success: true };
+}
+
+/**
+ * 作業確定通知を農家ごとに1回だけ送る。
+ * 同じ農家に複数申込があっても、ここでは1農家あたり1回呼ばれる。
+ * メール・プッシュ・in-app 等を実装する場合はこの中で行う。
+ */
+async function notifyFarmersWorkConfirmed(
+  _supabase: SupabaseClient,
+  _campaignId: string,
+  groupedByFarmer: Map<string, { bookingId: string; confirmedDate: string }[]>
+): Promise<void> {
+  for (const [_farmerId, items] of groupedByFarmer) {
+    // TODO: 1通の通知に items をまとめて送る（メール / プッシュ / 通知テーブル等）
+    void _farmerId;
+    void items;
+  }
+}
+
+/**
+ * ルート案表示用: 案件の申込一覧（畑情報付き）を取得。業者拠点からの1日ルート計算に使う。
+ */
+export interface BookingForRoute {
+  id: string;
+  farmer_id: string | null;
+  farmer_name: string | null;
+  area_10r: number;
+  field_id: string | null;
+  field: { id: string; lat: number | null; lng: number | null; address: string | null; name: string } | null;
+  /** 申込時の希望作業開始日 */
+  desired_start_date: string | null;
+  /** 申込時の希望作業終了日 */
+  desired_end_date: string | null;
+}
+
+export async function fetchBookingsWithFieldsForRoute(
+  supabase: SupabaseClient,
+  campaignId: string
+): Promise<BookingForRoute[]> {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, farmer_id, farmer_name, area_10r, field_id, desired_start_date, desired_end_date, fields(id, lat, lng, address, name)')
+    .eq('campaign_id', campaignId)
+    .neq('status', 'canceled');
+
+  if (error) {
+    console.error('fetchBookingsWithFieldsForRoute:', error);
+    return [];
+  }
+
+  return (data ?? []).map((row: Record<string, unknown>): BookingForRoute => ({
+    id: String(row.id ?? ''),
+    farmer_id: (row.farmer_id ?? null) as string | null,
+    farmer_name: (row.farmer_name ?? null) as string | null,
+    area_10r: Number(row.area_10r) || 0,
+    field_id: (row.field_id ?? null) as string | null,
+    field: (row.fields ?? null) as BookingForRoute['field'],
+    desired_start_date: (row.desired_start_date ?? null) as string | null,
+    desired_end_date: (row.desired_end_date ?? null) as string | null,
+  }));
+}
+
+/** 業者案件一覧用: 複数案件の申込サマリ（件数・面積・金額・農家別一覧）を一括取得 */
+export interface CampaignBookingSummaryItem {
+  id: string;
+  farmer_name: string | null;
+  area_10r: number;
+  locked_price: number | null;
+}
+
+export interface CampaignBookingSummary {
+  campaignId: string;
+  count: number;
+  totalArea10r: number;
+  totalAmount: number;
+  bookings: CampaignBookingSummaryItem[];
+}
+
+export async function fetchBookingSummariesForCampaigns(
+  supabase: SupabaseClient,
+  campaignIds: string[]
+): Promise<CampaignBookingSummary[]> {
+  if (campaignIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, campaign_id, farmer_name, area_10r, locked_price')
+    .in('campaign_id', campaignIds)
+    .neq('status', 'canceled');
+
+  if (error) {
+    console.error('fetchBookingSummariesForCampaigns:', error);
+    return [];
+  }
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    campaign_id: string;
+    farmer_name: string | null;
+    area_10r?: number;
+    locked_price?: number | null;
+  }>;
+
+  const byCampaign = new Map<string, CampaignBookingSummaryItem[]>();
+  for (const row of rows) {
+    const list = byCampaign.get(row.campaign_id) ?? [];
+    list.push({
+      id: row.id,
+      farmer_name: row.farmer_name ?? null,
+      area_10r: Number(row.area_10r) || 0,
+      locked_price: row.locked_price != null ? Number(row.locked_price) : null,
+    });
+    byCampaign.set(row.campaign_id, list);
+  }
+
+  return campaignIds.map((cid) => {
+    const bookings = byCampaign.get(cid) ?? [];
+    const totalArea10r = bookings.reduce((s, b) => s + b.area_10r, 0);
+    const totalAmount = bookings.reduce((s, b) => s + (b.locked_price ?? 0), 0);
+    return {
+      campaignId: cid,
+      count: bookings.length,
+      totalArea10r,
+      totalAmount,
+      bookings,
+    };
+  });
 }

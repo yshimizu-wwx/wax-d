@@ -42,7 +42,8 @@ export async function submitWorkReport(
   providerId: string
 ): Promise<SubmitWorkReportResult> {
   try {
-    if (!input.bookingId || input.actualArea10r == null || input.actualArea10r < 0) {
+    const actualArea10r = Number(input.actualArea10r);
+    if (!input.bookingId || Number.isNaN(actualArea10r) || actualArea10r <= 0) {
       return {
         success: false,
         message: '申込IDと実績面積は必須です',
@@ -97,7 +98,7 @@ export async function submitWorkReport(
       Number(projectRow.final_unit_price) ||
       Number(projectRow.base_price) ||
       0;
-    const finalAmount = calculateFinalAmount(finalUnitPrice, input.actualArea10r);
+    const finalAmount = calculateFinalAmount(finalUnitPrice, actualArea10r);
 
     let imageUrl = '';
     if (input.imageBase64 && input.mimeType) {
@@ -117,7 +118,7 @@ export async function submitWorkReport(
     const { error: updateError } = await supabase
       .from('bookings')
       .update({
-        actual_area_10r: input.actualArea10r,
+        actual_area_10r: actualArea10r,
         work_status: 'completed',
         final_amount: finalAmount,
         ...(imageUrl && { evidence_image_url: imageUrl }),

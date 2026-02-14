@@ -24,6 +24,17 @@ export function parseCampaignPolygon(
         return null;
       }
     }
+    // DBが GeoJSON を文字列で返す場合（例: Supabase の geometry 出力）
+    if (trimmed.startsWith('{')) {
+      try {
+        const obj = JSON.parse(trimmed) as { type?: string; coordinates?: unknown };
+        if (obj?.type === 'Polygon' && Array.isArray(obj?.coordinates)) {
+          return obj as Polygon;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     return null;
   }
   if (typeof raw === 'object' && raw !== null && 'type' in raw && 'coordinates' in raw) {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { MapPin, Clock, Truck } from "lucide-react";
 import type { FieldPoint } from "@/lib/geo/routeOptimizer";
 import { buildRouteSchedule } from "@/lib/geo/routeOptimizer";
@@ -67,7 +68,16 @@ export default function RouteStepsView({
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-slate-800 flex items-center gap-2">
                   <MapPin className="h-4 w-4 shrink-0 text-agrix-forest" />
-                  {point.fieldName || point.address || "圃場"}
+                  {point.fieldId ? (
+                    <Link
+                      href={`/provider/field-map/${point.fieldId}`}
+                      className="text-agrix-forest hover:underline focus:outline-none focus:ring-2 focus:ring-agrix-forest/50 rounded"
+                    >
+                      {point.fieldName || point.address || "圃場"}
+                    </Link>
+                  ) : (
+                    <span>{point.fieldName || point.address || "圃場"}</span>
+                  )}
                 </p>
                 <p className="text-sm text-slate-500 mt-0.5">{point.address}</p>
                 <p className="text-xs text-slate-400 mt-1">

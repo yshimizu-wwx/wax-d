@@ -153,3 +153,50 @@ function formatTime(d: Date): string {
   const m = d.getMinutes();
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
+
+/** Google Maps の経路案内で使う waypoints の最大数（URL制限） */
+const GOOGLE_MAPS_MAX_WAYPOINTS = 25;
+
+/**
+ * 訪問順序に沿った車での Google マップ経路案内 URL を生成する。
+ * 業者拠点がある場合は「拠点 → 1件目 → … → 最終」、ない場合は「1件目 → … → 最終」。
+ */
+export function buildGoogleMapsDirectionsUrl(
+  route: FieldPoint[],
+  options?: { originLat?: number | null; originLng?: number | null; travelMode?: 'driving' | 'walking' }
+): string {
+  if (route.length === 0) {
+    return 'https://www.google.com/maps';
+  }
+  const travelMode = options?.travelMode ?? 'driving';
+  const hasOrigin = options?.originLat != null && options?.originLng != null;
+
+  let origin: string;
+  let waypoints: string[];
+  let destination: string;
+
+  if (hasOrigin && route.length > 0) {
+    origin = `${options.originLat},${options.originLng}`;
+    waypoints = route.slice(0, -1).map((p) => `${p.lat},${p.lng}`).slice(0, GOOGLE_MAPS_MAX_WAYPOINTS);
+    destination = route.length === 1
+      ? `${route[0].lat},${route[0].lng}`
+      : `${route[route.length - 1].lat},${route[route.length - 1].lng}`;
+  } else {
+    origin = `${route[0].lat},${route[0].lng}`;
+    waypoints = route.length <= 2 ? [] : route.slice(1, -1).map((p) => `${p.lat},${p.lng}`).slice(0, GOOGLE_MAPS_MAX_WAYPOINTS);
+    destination = route.length === 1
+      ? `${route[0].lat},${route[0].lng}`
+      : `${route[route.length - 1].lat},${route[route.length - 1].lng}`;
+  }
+
+  const params = new URLSearchParams({
+    api: '1',
+    origin,
+    destination,
+    travelmode: travelMode,
+  });
+  if (waypoints.length > 0) {
+    params.set('waypoints', waypoints.join('|'));
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}

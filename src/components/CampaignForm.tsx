@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Project } from '@/types/database';
 import { calculateCurrentUnitPrice, calculateFinalAmount, calculateTax } from '@/lib/calculator/priceCalculator';
+import { formatDateWithWeekday } from '@/lib/dateFormat';
+import { DateInputWithWeekday } from '@/components/ui/date-input-with-weekday';
 import type { CampaignPricing } from '@/lib/calculator/types';
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react';
 
@@ -24,10 +26,13 @@ export interface FarmerFormData {
     desiredEndDate: string;
 }
 
-const WIZARD_STEPS = 3;
-
 export default function CampaignForm({ project, area10r, totalCampaignArea, onSubmit, initialFormData }: CampaignFormProps) {
-    const [step, setStep] = useState<1 | 2 | 3>(1);
+    const skipFarmerInfo = Boolean(
+        initialFormData?.farmerName?.trim() && initialFormData?.phone?.trim() && initialFormData?.email?.trim()
+    );
+    const WIZARD_STEPS = skipFarmerInfo ? 2 : 3;
+    type Step = 1 | 2 | 3;
+    const [step, setStep] = useState<Step>(skipFarmerInfo ? 1 : 1);
     const [formData, setFormData] = useState<FarmerFormData>({
         farmerName: initialFormData?.farmerName ?? '',
         phone: initialFormData?.phone ?? '',
@@ -76,32 +81,43 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
 
     const validateStep2 = (): boolean => {
         const newErrors: Partial<Record<keyof FarmerFormData, string>> = {};
-        if (!formData.desiredStartDate) newErrors.desiredStartDate = '開始日を選びましょう';
-        if (!formData.desiredEndDate) newErrors.desiredEndDate = '終了日を選びましょう';
-        if (formData.desiredStartDate && formData.desiredEndDate && formData.desiredStartDate > formData.desiredEndDate) {
-            newErrors.desiredEndDate = '終了日は開始日以降にしてください';
+        const hasStart = Boolean(formData.desiredStartDate?.trim());
+        const hasEnd = Boolean(formData.desiredEndDate?.trim());
+        if (hasStart || hasEnd) {
+            if (!hasStart) newErrors.desiredStartDate = '開始日を選ぶか、両方未入力にしてください';
+            if (!hasEnd) newErrors.desiredEndDate = '終了日を選ぶか、両方未入力にしてください';
+            if (hasStart && hasEnd) {
+                if (formData.desiredStartDate! > formData.desiredEndDate!) {
+                    newErrors.desiredEndDate = '終了日は開始日以降にしてください';
+                } else if (project.start_date && project.end_date) {
+                    if (formData.desiredStartDate! < project.start_date || formData.desiredEndDate! > project.end_date) {
+                        newErrors.desiredStartDate = '案件の作業期間内で選んでください';
+                        newErrors.desiredEndDate = '案件の作業期間内で選んでください';
+                    }
+                }
+            }
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
+    const hopeStep = (skipFarmerInfo ? 1 : 2) as Step;
+    const confirmStep = (skipFarmerInfo ? 2 : 3) as Step;
+
     const validateForm = (): boolean => {
-        return validateStep1() && validateStep2();
+        if (!skipFarmerInfo && !validateStep1()) return false;
+        return validateStep2();
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (step !== 3) return;
-        if (!validateStep1()) {
+        if (step !== confirmStep) return;
+        if (!skipFarmerInfo && !validateStep1()) {
             setStep(1);
             return;
         }
         if (!validateStep2()) {
-            setStep(2);
-            return;
-        }
-        if (area10r <= 0) {
-            toast.error('地図上で圃場を描画してください');
+            setStep(hopeStep);
             return;
         }
         setIsSubmitting(true);
@@ -116,7 +132,9 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
     };
 
     const stepContent = (
-        step === 1 ? '農家情報' : step === 2 ? '希望作業日' : '確認'
+        step === 1 && !skipFarmerInfo ? '農家情報'
+            : step === hopeStep ? '希望作業日（任意）'
+            : '確認'
     );
 
     return (
@@ -147,102 +165,111 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                         <div className="text-slate-500 mb-1">作業期間</div>
                         <div className="font-bold text-slate-800">
                             {project.start_date && project.end_date
-                                ? `${project.start_date} 〜 ${project.end_date}`
+                                ? `${formatDateWithWeekday(project.start_date)} 〜 ${formatDateWithWeekday(project.end_date)}`
                                 : '未定'}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Step 1: 農家情報 */}
-            <div
-                className={`overflow-hidden transition-all duration-300 ease-out ${
-                    step === 1 ? 'opacity-100 max-h-[9999px]' : 'opacity-0 max-h-0 pointer-events-none'
-                }`}
-            >
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide pb-2 border-b border-slate-200">
-                        {stepContent}
-                    </h3>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">農家名 <span className="text-red-600 text-xs ml-1">必須</span></label>
-                        <input
-                            type="text"
-                            value={formData.farmerName}
-                            onChange={(e) => handleChange('farmerName', e.target.value)}
-                            placeholder="農園名やお名前を教えてください"
-                            className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.farmerName ? 'border-red-500' : 'border-slate-200'}`}
-                        />
-                        {errors.farmerName && <p className="text-red-600 text-xs mt-1">{errors.farmerName}</p>}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Step 1: 農家情報（未ログイン or 情報不足時のみ） */}
+            {!skipFarmerInfo && (
+                <div
+                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                        step === 1 ? 'opacity-100 max-h-[9999px]' : 'opacity-0 max-h-0 pointer-events-none'
+                    }`}
+                >
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide pb-2 border-b border-slate-200">
+                            {stepContent}
+                        </h3>
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">電話番号 <span className="text-red-600 text-xs ml-1">必須</span></label>
+                            <label className="block text-sm font-bold text-slate-700 mb-2">農家名 <span className="text-red-600 text-xs ml-1">必須</span></label>
                             <input
-                                type="tel"
-                                value={formData.phone}
-                                onChange={(e) => handleChange('phone', e.target.value)}
-                                placeholder="連絡のつく番号を入力しましょう"
-                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.phone ? 'border-red-500' : 'border-slate-200'}`}
+                                type="text"
+                                value={formData.farmerName}
+                                onChange={(e) => handleChange('farmerName', e.target.value)}
+                                placeholder="農園名やお名前を教えてください"
+                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.farmerName ? 'border-red-500' : 'border-slate-200'}`}
                             />
-                            <p className="text-xs text-slate-500 mt-1">作業のご連絡に使います</p>
-                            {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
+                            {errors.farmerName && <p className="text-red-600 text-xs mt-1">{errors.farmerName}</p>}
                         </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">メールアドレス <span className="text-red-600 text-xs ml-1">必須</span></label>
-                            <input
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => handleChange('email', e.target.value)}
-                                placeholder="ログインに使うメールアドレスは？"
-                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.email ? 'border-red-500' : 'border-slate-200'}`}
-                            />
-                            {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">電話番号 <span className="text-red-600 text-xs ml-1">必須</span></label>
+                                <input
+                                    type="tel"
+                                    value={formData.phone}
+                                    onChange={(e) => handleChange('phone', e.target.value)}
+                                    placeholder="連絡のつく番号を入力しましょう"
+                                    className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.phone ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">作業のご連絡に使います</p>
+                                {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">メールアドレス <span className="text-red-600 text-xs ml-1">必須</span></label>
+                                <input
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={(e) => handleChange('email', e.target.value)}
+                                    placeholder="ログインに使うメールアドレスは？"
+                                    className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.email ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex justify-end pt-2">
-                        <button
-                            type="button"
-                            onClick={() => validateStep1() && setStep(2)}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-500 text-white font-bold hover:bg-green-600 transition-all duration-200 hover:shadow-lg"
-                        >
-                            次へ進む <ArrowRight className="w-4 h-4" />
-                        </button>
+                        <div className="flex justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => validateStep1() && setStep(hopeStep)}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-500 text-white font-bold hover:bg-green-600 transition-all duration-200 hover:shadow-lg"
+                            >
+                                次へ進む <ArrowRight className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
-            {/* Step 2: 希望作業日 */}
+            {/* 希望作業日（任意）・案件の期間内で選択 */}
             <div
                 className={`overflow-hidden transition-all duration-300 ease-out ${
-                    step === 2 ? 'opacity-100 max-h-[9999px]' : 'opacity-0 max-h-0 pointer-events-none'
+                    step === hopeStep ? 'opacity-100 max-h-[9999px]' : 'opacity-0 max-h-0 pointer-events-none'
                 }`}
             >
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
                     <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">{stepContent}</h3>
-                        <button type="button" onClick={() => setStep(1)} className="text-sm text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
-                            <ArrowLeft className="w-4 h-4" /> 戻る
-                        </button>
+                        {!skipFarmerInfo && (
+                            <button type="button" onClick={() => setStep(1)} className="text-sm text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
+                                <ArrowLeft className="w-4 h-4" /> 戻る
+                            </button>
+                        )}
                     </div>
+                    <p className="text-xs text-slate-500">案件の作業期間内で選べます。未入力でも申し込めます。</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">開始日 <span className="text-red-600 text-xs ml-1">必須</span></label>
-                            <input
-                                type="date"
+                            <label className="block text-sm font-bold text-slate-700 mb-2">開始日 <span className="text-slate-400 text-xs ml-1">任意</span></label>
+                            <DateInputWithWeekday
                                 value={formData.desiredStartDate}
-                                onChange={(e) => handleChange('desiredStartDate', e.target.value)}
-                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.desiredStartDate ? 'border-red-500' : 'border-slate-200'}`}
+                                onChange={(v) => handleChange('desiredStartDate', v)}
+                                min={project.start_date ?? undefined}
+                                max={project.end_date ?? undefined}
+                                placeholder="yyyy/mm/dd（曜日）で選択"
+                                wrapperClassName={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus-within:ring-2 focus-within:ring-green-500 ${errors.desiredStartDate ? 'border-red-500' : 'border-slate-200'}`}
                             />
                             {errors.desiredStartDate && <p className="text-red-600 text-xs mt-1">{errors.desiredStartDate}</p>}
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">終了日 <span className="text-red-600 text-xs ml-1">必須</span></label>
-                            <input
-                                type="date"
+                            <label className="block text-sm font-bold text-slate-700 mb-2">終了日 <span className="text-slate-400 text-xs ml-1">任意</span></label>
+                            <DateInputWithWeekday
                                 value={formData.desiredEndDate}
-                                onChange={(e) => handleChange('desiredEndDate', e.target.value)}
-                                className={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus:ring-2 focus:ring-green-500 ${errors.desiredEndDate ? 'border-red-500' : 'border-slate-200'}`}
+                                onChange={(v) => handleChange('desiredEndDate', v)}
+                                min={project.start_date ?? undefined}
+                                max={project.end_date ?? undefined}
+                                placeholder="yyyy/mm/dd（曜日）で選択"
+                                wrapperClassName={`w-full p-4 bg-slate-50 rounded-xl border outline-none focus-within:ring-2 focus-within:ring-green-500 ${errors.desiredEndDate ? 'border-red-500' : 'border-slate-200'}`}
                             />
                             <p className="text-xs text-slate-500 mt-1">案件の期間内で選んでください</p>
                             {errors.desiredEndDate && <p className="text-red-600 text-xs mt-1">{errors.desiredEndDate}</p>}
@@ -251,7 +278,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                     <div className="flex justify-end pt-2">
                         <button
                             type="button"
-                            onClick={() => validateStep2() && setStep(3)}
+                            onClick={() => validateStep2() && setStep(confirmStep)}
                             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-500 text-white font-bold hover:bg-green-600 transition-all duration-200 hover:shadow-lg"
                         >
                             次へ進む <ArrowRight className="w-4 h-4" />
@@ -260,25 +287,31 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                 </div>
             </div>
 
-            {/* Step 3: 確認・送信 */}
+            {/* 確認・送信 */}
             <div
                 className={`overflow-hidden transition-all duration-300 ease-out ${
-                    step === 3 ? 'opacity-100 max-h-[9999px]' : 'opacity-0 max-h-0 pointer-events-none'
+                    step === confirmStep ? 'opacity-100 max-h-[9999px]' : 'opacity-0 max-h-0 pointer-events-none'
                 }`}
             >
                 <div className="space-y-6">
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">{stepContent}</h3>
-                        <button type="button" onClick={() => setStep(2)} className="text-sm text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
+                        <button type="button" onClick={() => setStep(hopeStep)} className="text-sm text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
                             <ArrowLeft className="w-4 h-4" /> 戻る
                         </button>
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-sm">
-                        <p><span className="text-slate-500">お名前</span> {formData.farmerName}</p>
-                        <p><span className="text-slate-500">電話</span> {formData.phone}</p>
-                        <p><span className="text-slate-500">メール</span> {formData.email}</p>
-                        <p><span className="text-slate-500">希望期間</span> {formData.desiredStartDate} 〜 {formData.desiredEndDate}</p>
+                        {skipFarmerInfo ? (
+                            <p className="text-slate-500">農家情報はログイン情報を使用します</p>
+                        ) : (
+                            <>
+                                <p><span className="text-slate-500">お名前</span> {formData.farmerName}</p>
+                                <p><span className="text-slate-500">電話</span> {formData.phone}</p>
+                                <p><span className="text-slate-500">メール</span> {formData.email}</p>
+                            </>
+                        )}
+                        <p><span className="text-slate-500">希望期間</span> {formData.desiredStartDate && formData.desiredEndDate ? `${formData.desiredStartDate} 〜 ${formData.desiredEndDate}` : '未指定（案件期間内で調整）'}</p>
                     </div>
 
                     <div className="bg-green-50 p-6 rounded-2xl border border-green-200">
@@ -286,7 +319,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
                             <div className="text-4xl font-black text-green-600">
                                 {area10r.toFixed(2)} <span className="text-lg font-normal text-green-500">反 (10a)</span>
                             </div>
-                            {area10r === 0 && <p className="text-sm text-slate-500 mt-2">地図上で圃場を描画してください</p>}
+                            <p className="text-sm text-slate-500 mt-2">この案件の申込面積です</p>
                         </div>
                     </div>
 
@@ -316,7 +349,7 @@ export default function CampaignForm({ project, area10r, totalCampaignArea, onSu
 
                     <button
                         type="submit"
-                        disabled={isSubmitting || area10r <= 0}
+                        disabled={isSubmitting}
                         className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white font-bold py-5 px-8 rounded-2xl hover:from-green-600 hover:to-green-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl text-lg inline-flex items-center justify-center gap-2"
                     >
                         {isSubmitting ? (

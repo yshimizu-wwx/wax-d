@@ -2,50 +2,97 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { MapPin, CheckCircle2, ArrowRight, Loader2, Sprout } from 'lucide-react';
-import { fetchOpenCampaigns, fetchCampaignTotalArea } from '@/lib/api';
-import { fetchFieldsByFarmer } from '@/lib/api';
+import { MapPin, CheckCircle2, ArrowRight, Loader2, Sprout, Filter } from 'lucide-react';
+import {
+  fetchCampaigns,
+  fetchCampaignTotalArea,
+  fetchFieldsByFarmer,
+  fetchLinkedProvidersForFarmer,
+  type LinkedProvider,
+} from '@/lib/api';
 import { getCurrentUser } from '@/lib/auth';
+import { isoToYyyyMmDd, yyyyMmDdToIso, getDefaultPeriod } from '@/lib/dateFormat';
 import { parseCampaignPolygon, isFieldInCampaignArea } from '@/lib/geo/spatial-queries';
 import type { Project } from '@/types/database';
 import type { Field } from '@/types/database';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import CampaignMapView, { type CampaignWithPolygon } from '@/components/CampaignMapView';
 import type { CampaignWithArea } from '@/components/CampaignTimelineCard';
+
+function parseInterestedCropIds(raw: string | null | undefined): string[] {
+  if (raw == null || raw === '') return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) return parsed as string[];
+  } catch {
+    return (raw as string).split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
 
 export default function CaseMapFinder() {
   const [campaigns, setCampaigns] = useState<CampaignWithPolygon[]>([]);
   const [campaignsWithArea, setCampaignsWithArea] = useState<CampaignWithArea[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
+  const [linkedProviders, setLinkedProviders] = useState<LinkedProvider[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [filterByMyFields, setFilterByMyFields] = useState(false);
+  const [filterByMyCrops, setFilterByMyCrops] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'past'>('open');
+  const [filterDateFrom, setFilterDateFrom] = useState(() => getDefaultPeriod().from);
+  const [filterDateTo, setFilterDateTo] = useState(() => getDefaultPeriod().to);
   const [loading, setLoading] = useState(true);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [farmerId, setFarmerId] = useState<string | null>(null);
+  const [interestedCropIds, setInterestedCropIds] = useState<string[]>([]);
 
+  // 農家: 紐付き業者・畑・品目を取得
+  useEffect(() => {
+    getCurrentUser().then((user) => {
+      if (!user || user.role !== 'farmer') return;
+      setFarmerId(user.id);
+      setInterestedCropIds(parseInterestedCropIds(user.interested_crop_ids));
+      fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+      fetchFieldsByFarmer(user.id).then(setFields);
+    });
+  }, []);
+
+  // 案件取得: 業者・表示・期間フィルタに従う（業者未選択時は全業者の案件）
   useEffect(() => {
     getCurrentUser().then((user) => {
       if (!user || user.role !== 'farmer') return;
       setLoading(true);
-      Promise.all([
-        fetchOpenCampaigns(),
-        fetchFieldsByFarmer(user.id),
-      ]).then(([campaignList, fieldList]) => {
-        setFields(fieldList);
-        const withPolygon: CampaignWithPolygon[] = campaignList.map((c) => ({
-          ...c,
-          polygonGeoJSON: parseCampaignPolygon(c.target_area_polygon) ?? undefined,
-        }));
-        setCampaigns(withPolygon);
-        return Promise.all(
-          campaignList.map((c) =>
-            fetchCampaignTotalArea(c.id).then((total) => ({ ...c, totalArea10r: total }))
-          )
-        );
-      }).then((withArea) => {
-        setCampaignsWithArea(withArea as CampaignWithArea[]);
-      }).finally(() => setLoading(false));
+      const statusForApi = filterStatus === 'all' ? 'all' : filterStatus === 'open' ? 'open' : 'past';
+      const promise = fetchCampaigns({
+        status: statusForApi,
+        providerId: selectedProviderId ?? undefined,
+        dateFrom: filterDateFrom || undefined,
+        dateTo: filterDateTo || undefined,
+      });
+
+      promise
+        .then((campaignList) => {
+          const withPolygon: CampaignWithPolygon[] = campaignList.map((c) => ({
+            ...c,
+            polygonGeoJSON: parseCampaignPolygon(c.target_area_polygon) ?? undefined,
+          }));
+          setCampaigns(withPolygon);
+          return Promise.all(
+            campaignList.map((c) =>
+              fetchCampaignTotalArea(c.id).then((total) => ({ ...c, totalArea10r: total }))
+            )
+          );
+        })
+        .then((withArea) => {
+          setCampaignsWithArea((withArea ?? []) as CampaignWithArea[]);
+        })
+        .finally(() => setLoading(false));
     });
-  }, []);
+  }, [selectedProviderId, filterStatus, filterDateFrom, filterDateTo]);
 
   const campaignToEligibleFields = useMemo(() => {
     const map = new Map<string, Field[]>();
@@ -56,6 +103,23 @@ export default function CaseMapFinder() {
     });
     return map;
   }, [campaigns, fields]);
+
+  // クライアント側フィルタ: 自分の畑エリア内のみ・自分の品目のみ
+  const filteredCampaignsWithArea = useMemo(() => {
+    let list = campaignsWithArea;
+    if (filterByMyFields) {
+      list = list.filter((c) => (campaignToEligibleFields.get(c.id) ?? []).length > 0);
+    }
+    if (filterByMyCrops && interestedCropIds.length > 0) {
+      list = list.filter((c) => c.target_crop_id && interestedCropIds.includes(c.target_crop_id));
+    }
+    return list;
+  }, [campaignsWithArea, filterByMyFields, filterByMyCrops, interestedCropIds, campaignToEligibleFields]);
+
+  const filteredCampaignsForMap = useMemo(() => {
+    const ids = new Set(filteredCampaignsWithArea.map((c) => c.id));
+    return campaigns.filter((c) => ids.has(c.id));
+  }, [campaigns, filteredCampaignsWithArea]);
 
   if (loading) {
     return (
@@ -76,12 +140,120 @@ export default function CaseMapFinder() {
           募集中の案件エリア（緑）とあなたの畑（ピン）を地図で確認できます。畑がエリア内にある案件は「参加可能」と表示されます。
         </p>
 
+        {/* 業者を選ぶ */}
+        {farmerId && (
+          <Card className="mb-6 p-4 border-dashboard-border bg-dashboard-card/50">
+            <p className="text-sm font-medium text-dashboard-text mb-3">どの業者の案件を見ますか？</p>
+            {linkedProviders.length === 0 ? (
+              <p className="text-sm text-dashboard-muted">
+                紐付いている業者がいません。マイページで招待コードを入力するか、業者から招待リンクで紐づけましょう。
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {linkedProviders.map((p) => (
+                  <Button
+                    key={p.id}
+                    type="button"
+                    variant={selectedProviderId === p.id ? 'default' : 'outline'}
+                    size="sm"
+                    className={
+                      selectedProviderId === p.id
+                        ? 'bg-agrix-forest text-white border-agrix-forest'
+                        : 'border-dashboard-border text-dashboard-text hover:bg-dashboard-muted/20'
+                    }
+                    onClick={() => setSelectedProviderId(p.id)}
+                  >
+                    {p.name}
+                  </Button>
+                ))}
+                {selectedProviderId && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-dashboard-muted hover:text-dashboard-text"
+                    onClick={() => setSelectedProviderId(null)}
+                  >
+                    選択を解除
+                  </Button>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* 案件一覧と同じフィルタ */}
+        {farmerId && (
+          <Card className="mb-6 p-4 border-dashboard-border bg-dashboard-card/50">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-dashboard-text">
+                <Filter className="w-4 h-4 text-agrix-forest" />
+                フィルタ
+              </span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterByMyFields}
+                  onChange={(e) => setFilterByMyFields(e.target.checked)}
+                  className="rounded border-dashboard-border text-agrix-forest focus:ring-agrix-forest"
+                />
+                <span className="text-sm text-dashboard-text">自分の畑のエリア内のみ</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterByMyCrops}
+                  onChange={(e) => setFilterByMyCrops(e.target.checked)}
+                  className="rounded border-dashboard-border text-agrix-forest focus:ring-agrix-forest"
+                />
+                <span className="text-sm text-dashboard-text">自分の品目のみ</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="case-map-filter-status" className="text-sm text-dashboard-muted shrink-0">表示</Label>
+                <select
+                  id="case-map-filter-status"
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value as 'all' | 'open' | 'past')}
+                  className="rounded-lg border border-dashboard-border bg-dashboard-card text-dashboard-text text-sm px-3 py-1.5"
+                >
+                  <option value="all">すべて</option>
+                  <option value="open">募集中のみ</option>
+                  <option value="past">過去の案件</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="case-map-date-from" className="text-sm text-dashboard-muted shrink-0">期間</Label>
+                <Input
+                  id="case-map-date-from"
+                  type="text"
+                  placeholder="yyyy/mm/dd"
+                  value={isoToYyyyMmDd(filterDateFrom)}
+                  onChange={(e) => setFilterDateFrom(yyyyMmDdToIso(e.target.value))}
+                  className="w-36 h-8 text-sm"
+                />
+                <span className="text-dashboard-muted">～</span>
+                <Input
+                  id="case-map-date-to"
+                  type="text"
+                  placeholder="yyyy/mm/dd"
+                  value={isoToYyyyMmDd(filterDateTo)}
+                  onChange={(e) => setFilterDateTo(yyyyMmDdToIso(e.target.value))}
+                  className="w-36 h-8 text-sm"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-dashboard-muted mt-2">
+              自分の畑の周辺や登録した品目に合う案件が絞り込まれます。
+            </p>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2">
             <Card className="overflow-hidden p-0">
               <div className="h-[480px] w-full">
                 <CampaignMapView
-                  campaigns={campaigns}
+                  campaigns={filteredCampaignsForMap}
                   fields={fields}
                   highlightedCampaignId={highlightedId}
                   style={{ height: '100%', minHeight: '480px', borderRadius: 0 }}
@@ -92,17 +264,21 @@ export default function CaseMapFinder() {
           <div className="space-y-3">
             <h2 className="text-sm font-bold text-dashboard-text flex items-center gap-2">
               <Sprout className="w-4 h-4 text-agrix-forest" />
-              募集中の案件
+              {selectedProviderId
+                ? `${linkedProviders.find((p) => p.id === selectedProviderId)?.name ?? '業者'}の案件`
+                : '募集中の案件'}
             </h2>
-            {campaignsWithArea.length === 0 ? (
+            {filteredCampaignsWithArea.length === 0 ? (
               <Card>
                 <CardContent className="p-6 text-center text-dashboard-muted text-sm">
-                  現在募集中の案件はありません。
+                  {campaignsWithArea.length === 0
+                    ? '現在募集中の案件はありません。'
+                    : 'フィルタに一致する案件はありません。条件を変えてみてください。'}
                 </CardContent>
               </Card>
             ) : (
               <ul className="space-y-2">
-                {campaignsWithArea.map((c) => {
+                {filteredCampaignsWithArea.map((c) => {
                   const eligibleFields = campaignToEligibleFields.get(c.id) ?? [];
                   const isEligible = eligibleFields.length > 0;
                   return (

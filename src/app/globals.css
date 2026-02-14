@@ -109,3 +109,27 @@ body {
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+
+/* 地図ポップアップ：白背景で文字を常に視認可能に（ダッシュボードテーマの影響を受けない） */
+.leaflet-popup-agrix.leaflet-popup-content-wrapper {
+  background: #fff;
+  color: #171717;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.leaflet-popup-agrix .leaflet-popup-content {
+  margin: 10px 14px;
+  color: #171717;
+}
+
+/* 畑ポリゴン上のラベル（「畑を登録」「登録した畑」） */
+.leaflet-tooltip.polygon-label-tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a1a1a;
+  border: 2px solid #DC2626;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: bold;
+  font-size: 14px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}

@@ -18,6 +18,28 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 // Import leaflet-draw side effects
 import 'leaflet-draw';
 
+/** Leaflet.draw のツールバー・ツールチップを日本語に */
+function setLeafletDrawJapanese() {
+  if (typeof L === 'undefined' || !L.drawLocal) return;
+  L.drawLocal.draw.toolbar.actions = { title: '描画をキャンセル', text: 'キャンセル' };
+  L.drawLocal.draw.toolbar.finish = { title: '描画を完了', text: '完了' };
+  L.drawLocal.draw.toolbar.undo = { title: '最後の点を削除', text: '最後の点を削除' };
+  L.drawLocal.draw.toolbar.buttons.polygon = '畑の範囲を描く';
+  L.drawLocal.draw.handlers.polygon.tooltip.start = 'クリックして範囲の描画を開始';
+  L.drawLocal.draw.handlers.polygon.tooltip.cont = 'クリックして続けて描く';
+  L.drawLocal.draw.handlers.polygon.tooltip.end = '最初の点をクリックして形を閉じる';
+  L.drawLocal.edit.toolbar.actions.save = { title: '変更を保存', text: '保存' };
+  L.drawLocal.edit.toolbar.actions.cancel = { title: '編集をキャンセル', text: 'キャンセル' };
+  L.drawLocal.edit.toolbar.actions.clearAll = { title: 'すべてクリア', text: 'すべてクリア' };
+  L.drawLocal.edit.toolbar.buttons.edit = '範囲を編集';
+  L.drawLocal.edit.toolbar.buttons.editDisabled = '編集する範囲がありません';
+  L.drawLocal.edit.toolbar.buttons.remove = '範囲を削除';
+  L.drawLocal.edit.toolbar.buttons.removeDisabled = '削除する範囲がありません';
+  L.drawLocal.edit.handlers.edit.tooltip.text = 'ハンドルをドラッグして編集';
+  L.drawLocal.edit.handlers.edit.tooltip.subtext = 'キャンセルで元に戻します';
+  L.drawLocal.edit.handlers.remove.tooltip.text = 'クリックして削除';
+}
+
 // Fix icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -28,24 +50,40 @@ L.Icon.Default.mergeOptions({
 
 const DEFAULT_CENTER: [number, number] = [35.6812, 139.7671];
 
+/** 参照用ポリゴン1つ（依頼された畑など、編集不可で表示する枠） */
+export type ReferencePolygon = { lat: number; lng: number }[];
+
 interface PolygonMapProps {
     onPolygonComplete: (coords: { lat: number; lng: number }[] | null, area10r: number, polygon: Polygon | null) => void;
     initialPolygon?: { lat: number; lng: number }[];
+    /** 参照用ポリゴン（複数可）。依頼された畑などを編集不可で表示する。 */
+    referencePolygons?: ReferencePolygon[];
     /** 地図の初期中心（拠点座標）。未指定時は initialAddress をジオコードするか東京駅周辺 */
     initialCenter?: [number, number];
     /** 拠点住所。initialCenter が無い場合にジオコードして初期表示に使用 */
     initialAddress?: string | null;
     /** 住所検索バーを表示し、検索で地図を移動できるようにする */
     showAddressSearch?: boolean;
+    /** 住所検索（地図を移動）成功時に、取得した住所・座標を親に渡す */
+    onAddressSearchResult?: (address: string | undefined, lat: number, lng: number) => void;
 }
 
 interface MapControllerProps extends PolygonMapProps {
     flyTo?: [number, number] | null;
 }
 
-function MapController({ onPolygonComplete, initialPolygon, flyTo }: MapControllerProps) {
+const REFERENCE_POLYGON_STYLE = {
+    color: '#0d9488',
+    fillColor: '#0d9488',
+    fillOpacity: 0.25,
+    weight: 2,
+    dashArray: '6, 4'
+};
+
+function MapController({ onPolygonComplete, initialPolygon, referencePolygons, flyTo }: MapControllerProps) {
     const map = useMap();
     const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
+    const referenceLayerRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
     const prevFlyToRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -56,20 +94,57 @@ function MapController({ onPolygonComplete, initialPolygon, flyTo }: MapControll
         map.flyTo([flyTo[0], flyTo[1]], 15, { duration: 0.5 });
     }, [map, flyTo]);
 
+    // 参照用ポリゴン（依頼された畑など）を別レイヤーで表示
+    useEffect(() => {
+        const refLayer = referenceLayerRef.current;
+        refLayer.clearLayers();
+        map.addLayer(refLayer);
+
+        const polygons = referencePolygons ?? [];
+        if (polygons.length > 0) {
+            let bounds: L.LatLngBounds | null = null;
+            polygons.forEach((coords) => {
+                if (coords.length > 2) {
+                    const layer = L.polygon(coords, REFERENCE_POLYGON_STYLE);
+                    refLayer.addLayer(layer);
+                    const b = layer.getBounds();
+                    if (!bounds) bounds = b;
+                    else bounds.extend(b);
+                }
+            });
+            // 参照ポリゴンのみがある場合（initialPolygon は別 effect で後から入る可能性あり）、一旦範囲を合わせる
+            if (bounds && !initialPolygon?.length) {
+                map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16 });
+            }
+        }
+
+        return () => {
+            map.removeLayer(refLayer);
+        };
+    }, [map, referencePolygons, initialPolygon?.length]);
+
     useEffect(() => {
         const drawnItems = drawnItemsRef.current;
+        drawnItems.clearLayers();
         map.addLayer(drawnItems);
 
+        setLeafletDrawJapanese();
+
         // Add initial polygon if provided
+        let boundsToFit: L.LatLngBounds | null = null;
         if (initialPolygon && initialPolygon.length > 2) {
             const polygon = L.polygon(initialPolygon, {
-                color: '#1A4731',
-                fillColor: '#1A4731',
-                fillOpacity: 0.25,
-                weight: 3
+                color: '#DC2626',
+                fillColor: '#DC2626',
+                fillOpacity: 0.45,
+                weight: 4
             });
             drawnItems.addLayer(polygon);
-            map.fitBounds(polygon.getBounds());
+            boundsToFit = polygon.getBounds();
+        }
+
+        if (boundsToFit) {
+            map.fitBounds(boundsToFit, { padding: [24, 24], maxZoom: 16 });
         }
 
         // Initialize Draw Control
@@ -79,10 +154,10 @@ function MapController({ onPolygonComplete, initialPolygon, flyTo }: MapControll
                     allowIntersection: false,
                     showArea: true,
                     shapeOptions: {
-                        color: '#1A4731',
-                        fillColor: '#1A4731',
-                        fillOpacity: 0.25,
-                        weight: 3
+                        color: '#DC2626',
+                        fillColor: '#DC2626',
+                        fillOpacity: 0.45,
+                        weight: 4
                     }
                 },
                 rectangle: false,
@@ -189,6 +264,8 @@ export default function PolygonMap(props: PolygonMapProps) {
                 setFlyToTarget([result.lat, result.lng]);
                 setIsFlying(true);
                 setTimeout(() => setIsFlying(false), 600);
+                // 検索結果の住所・座標を親に渡し、フォームの「住所・場所」に同期
+                props.onAddressSearchResult?.(result.displayName ?? q, result.lat, result.lng);
             } else {
                 setSearchError('住所が見つかりませんでした。別のキーワードで試してください。');
             }
@@ -197,7 +274,7 @@ export default function PolygonMap(props: PolygonMapProps) {
         } finally {
             setSearchLoading(false);
         }
-    }, [addressQuery, clearGeoError]);
+    }, [addressQuery, clearGeoError, props.onAddressSearchResult]);
 
     const handleCurrentLocation = useCallback(async () => {
         setSearchError(null);
@@ -258,7 +335,7 @@ export default function PolygonMap(props: PolygonMapProps) {
                         >
                             <TileLayer
                                 attribution='&copy; <a href="https://www.google.com/maps">Google</a>'
-                                url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" // Google Hybrid
+                                url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=ja" // Google Hybrid（日本語表示）
                                 maxZoom={20}
                             />
                             <MapController {...props} flyTo={flyToTarget} />

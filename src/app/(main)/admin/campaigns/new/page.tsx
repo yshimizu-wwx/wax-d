@@ -1,15 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
-import { createCampaign } from '@/lib/api';
+import { createCampaign, fetchCampaignById, fetchWorkRequestById, setWorkRequestConverted } from '@/lib/api';
 import { fetchMasters, createMaster } from '@/lib/masters';
 import type { Master } from '@/types/database';
 import type { Polygon } from 'geojson';
+import { parseCampaignPolygon } from '@/lib/geo/spatial-queries';
+import { calculatePolygonArea10r, getPolygonCenter } from '@/lib/geo/areaCalculator';
+import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowRight, ArrowLeft, Copy } from 'lucide-react';
+import type { Project } from '@/types/database';
 
 // Dynamically import PolygonMap to avoid SSR issues
 const PolygonMap = dynamic(() => import('@/components/PolygonMap'), {
@@ -49,7 +54,29 @@ interface CampaignFormData {
     confirmationDeadlineDays: number;
 }
 
-export default function CampaignCreatePage() {
+function campaignRowToFormData(c: Project): CampaignFormData {
+    return {
+        cropId: c.target_crop_id ?? '',
+        categoryId: c.task_category_id ?? '',
+        detailId: c.task_detail_id ?? '',
+        location: c.location ?? '',
+        startDate: c.start_date ?? '',
+        endDate: c.end_date ?? '',
+        pesticide: c.pesticide_name ?? c.pesticide ?? '',
+        dilutionRate: c.dilution_rate != null ? String(c.dilution_rate) : '',
+        amountPer10r: c.amount_per_10r != null ? String(c.amount_per_10r) : '',
+        basePrice: Number(c.base_price) || 0,
+        minPrice: Number(c.min_price) || 0,
+        minTargetArea10r: Number(c.min_target_area_10r) || 0,
+        targetArea10r: Number(c.target_area_10r) || 0,
+        confirmationDeadlineDays: Number(c.confirmation_deadline_days) || 0,
+    };
+}
+
+function CampaignCreatePageContent() {
+    const searchParams = useSearchParams();
+    const copyFromId = searchParams.get('copyFrom');
+    const fromWorkRequestId = searchParams.get('fromWorkRequest');
     const [user, setUser] = useState<User | null>(null);
     const [providerId, setProviderId] = useState<string | null>(null);
     const [polygon, setPolygon] = useState<Polygon | null>(null);
@@ -57,6 +84,9 @@ export default function CampaignCreatePage() {
     const [area10r, setArea10r] = useState<number>(0);
     const [step, setStep] = useState<1 | 2>(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [copySourceTitle, setCopySourceTitle] = useState<string | null>(null);
+    const [copyLoadError, setCopyLoadError] = useState<string | null>(null);
+    const [copyLoading, setCopyLoading] = useState(false);
     const [crops, setCrops] = useState<Master[]>([]);
     const [taskCategories, setTaskCategories] = useState<Master[]>([]);
     const [taskDetails, setTaskDetails] = useState<Master[]>([]);
@@ -68,6 +98,12 @@ export default function CampaignCreatePage() {
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newDetailName, setNewDetailName] = useState('');
     const [addingMaster, setAddingMaster] = useState(false);
+    /** 依頼に紐づく畑のポリゴン（地図に参照表示）。fromWorkRequest の場合に取得 */
+    const [requestFieldPolygons, setRequestFieldPolygons] = useState<{ lat: number; lng: number }[][]>([]);
+    /** 依頼畑の中心（地図の初期表示で使用） */
+    const [requestFieldsMapCenter, setRequestFieldsMapCenter] = useState<[number, number] | null>(null);
+    /** Step 2 ブロックへのスクロール用 */
+    const step2Ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         getCurrentUser().then((u) => {
@@ -75,6 +111,157 @@ export default function CampaignCreatePage() {
             if (u?.role === 'provider' && u?.id) setProviderId(u.id);
         });
     }, []);
+
+    // 過去案件コピー: copyFrom で指定された案件を取得してフォーム・ポリゴンを事前入力（fromWorkRequest が指定されている場合は行わない）
+    useEffect(() => {
+        if (!copyFromId || !providerId || fromWorkRequestId) return;
+        let cancelled = false;
+        setCopyLoading(true);
+        setCopyLoadError(null);
+        fetchCampaignById(copyFromId, providerId)
+            .then((c) => {
+                if (cancelled || !c) {
+                    if (!cancelled && copyFromId) setCopyLoadError('案件の取得に失敗しました。権限を確認するか、URLを確認してください。');
+                    return;
+                }
+                setCopySourceTitle(c.campaign_title || c.location || '（無題）');
+                setFormData(campaignRowToFormData(c));
+                const poly = parseCampaignPolygon(c.target_area_polygon);
+                if (poly) {
+                    setPolygon(poly);
+                    const initialCoords = poly.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
+                    setCoords(initialCoords);
+                    setArea10r(calculatePolygonArea10r(poly));
+                    setStep(2);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setCopyLoadError('コピー元の案件を読み込めませんでした。');
+            })
+            .finally(() => {
+                if (!cancelled) setCopyLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [copyFromId, providerId, fromWorkRequestId]);
+
+    // 依頼から案件化: fromWorkRequest で指定された依頼を取得し、品目・作業種別・作業内容をプリフィル（マスタにない場合は新規登録）
+    useEffect(() => {
+        if (!fromWorkRequestId || !providerId || mastersLoading) return;
+        let cancelled = false;
+        setCopyLoading(true);
+        setCopyLoadError(null);
+        (async () => {
+            const wr = await fetchWorkRequestById(fromWorkRequestId, providerId);
+            if (cancelled || !wr) {
+                if (!cancelled && fromWorkRequestId) setCopyLoadError('依頼の取得に失敗しました。');
+                setCopyLoading(false);
+                return;
+            }
+            const cropName = (wr.crop_name_free_text || wr.crop_name || '').trim();
+            const categoryName = (wr.task_category_free_text || wr.task_category_name || '').trim();
+            const detailName = (wr.task_detail_free_text || wr.task_detail_name || '').trim();
+
+            let cropId = '';
+            let categoryId = '';
+            let detailId = '';
+
+            if (cropName) {
+                const existing = crops.find((m) => m.name === cropName);
+                if (existing) cropId = existing.id;
+                else {
+                    const res = await createMaster('crop', cropName, providerId);
+                    if (res.success && res.id) {
+                        cropId = res.id;
+                        const [c] = await Promise.all([fetchMasters('crop', providerId)]);
+                        if (!cancelled) setCrops(c.filter((m) => m.status === 'active'));
+                    }
+                }
+            }
+            if (categoryName) {
+                const existing = taskCategories.find((m) => m.name === categoryName);
+                if (existing) categoryId = existing.id;
+                else {
+                    const res = await createMaster('task_category', categoryName, providerId);
+                    if (res.success && res.id) {
+                        categoryId = res.id;
+                        const [tc] = await Promise.all([fetchMasters('task_category', providerId)]);
+                        if (!cancelled) setTaskCategories(tc.filter((m) => m.status === 'active'));
+                    }
+                }
+            }
+            if (detailName && categoryId) {
+                const existing = taskDetails.find((d) => d.parent_id === categoryId && d.name === detailName);
+                if (existing) detailId = existing.id;
+                else {
+                    const res = await createMaster('task_detail', detailName, providerId, categoryId);
+                    if (res.success && res.id) {
+                        detailId = res.id;
+                        const [td] = await Promise.all([fetchMasters('task_detail', providerId)]);
+                        if (!cancelled) setTaskDetails(td);
+                    }
+                }
+            }
+
+            if (cancelled) {
+                setCopyLoading(false);
+                return;
+            }
+            setCopySourceTitle(`依頼から作成: ${cropName || categoryName || '（内容未指定）'}`);
+            setFormData((prev) => ({
+                ...prev,
+                cropId,
+                categoryId,
+                detailId,
+                location: wr.location || prev.location,
+                startDate: wr.desired_start_date || prev.startDate,
+                endDate: wr.desired_end_date || prev.endDate,
+            }));
+            setCopyLoading(false);
+        })();
+        return () => { cancelled = true; };
+        // 依頼プリフィルはマスタ読込完了時のみ1回実行。crops/taskCategories/taskDetails を deps に含めると編集上書きの原因になるため省略
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fromWorkRequestId, providerId, mastersLoading]);
+
+    // 依頼から案件化時: 依頼に紐づく畑を取得し、地図に参照表示する
+    useEffect(() => {
+        if (!fromWorkRequestId || !providerId) return;
+        let cancelled = false;
+        fetch(`/api/provider/work-requests/${encodeURIComponent(fromWorkRequestId)}/fields`)
+            .then((res) => (res.ok ? res.json() : Promise.reject(new Error('畑の取得に失敗しました'))))
+            .then((fields: { lat?: number | null; lng?: number | null; area_coordinates?: string | null }[]) => {
+                if (cancelled || !Array.isArray(fields)) return;
+                const polygons: { lat: number; lng: number }[][] = [];
+                let firstCenter: [number, number] | null = null;
+                fields.forEach((f) => {
+                    const poly = parseCampaignPolygon(f.area_coordinates);
+                    if (poly && poly.coordinates[0]?.length) {
+                        const coords = poly.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
+                        polygons.push(coords);
+                        if (!firstCenter) {
+                            const [lng, lat] = getPolygonCenter(poly);
+                            firstCenter = [lat, lng];
+                        }
+                    } else if (f.lat != null && f.lng != null) {
+                        const lat = Number(f.lat);
+                        const lng = Number(f.lng);
+                        const d = 0.0005;
+                        polygons.push(
+                            [{ lat: lat - d, lng: lng - d }, { lat: lat - d, lng: lng + d }, { lat: lat + d, lng: lng + d }, { lat: lat + d, lng: lng - d }]
+                        );
+                        if (!firstCenter) firstCenter = [lat, lng];
+                    }
+                });
+                if (!cancelled) {
+                    setRequestFieldPolygons(polygons);
+                    setRequestFieldsMapCenter(firstCenter);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setRequestFieldPolygons([]);
+            });
+        return () => { cancelled = true; };
+    }, [fromWorkRequestId, providerId]);
 
     const masterProviderId = user?.role === 'provider' ? user?.id ?? null : null;
     useEffect(() => {
@@ -197,7 +384,7 @@ export default function CampaignCreatePage() {
         confirmationDeadlineDays: 0,
     });
 
-    const handlePolygonComplete = (
+    const handlePolygonComplete = async (
         newCoords: { lat: number; lng: number }[] | null,
         newArea10r: number,
         newPolygon: Polygon | null
@@ -205,10 +392,26 @@ export default function CampaignCreatePage() {
         setCoords(newCoords);
         setArea10r(newArea10r);
         setPolygon(newPolygon);
+        // 描画したエリアの中心で逆ジオコードし、表示用地区名に反映
+        if (newPolygon) {
+            const [lng, lat] = getPolygonCenter(newPolygon);
+            const rev = await reverseGeocodeViaApi(lat, lng);
+            if (rev?.displayName) {
+                setFormData((prev) => ({ ...prev, location: rev.displayName! }));
+            }
+        }
     };
 
     const goNext = () => {
-        if (step === 1 && polygon) setStep(2);
+        if (step === 1 && polygon) {
+            setStep(2);
+            // Step 2 表示後にそのブロックへスムーズスクロール
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    step2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 50);
+            });
+        }
     };
     const goBack = () => {
         if (step === 2) setStep(1);
@@ -258,6 +461,9 @@ export default function CampaignCreatePage() {
             );
 
             if (result.success) {
+                if (fromWorkRequestId && providerId && result.campaignId) {
+                    await setWorkRequestConverted(fromWorkRequestId, providerId, result.campaignId);
+                }
                 toast.success('案件を作成しました');
                 window.location.href = '/admin';
             } else {
@@ -301,6 +507,25 @@ export default function CampaignCreatePage() {
             </header>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+                {copyLoading && (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-agrix-forest/30 bg-agrix-forest/10 px-4 py-3 text-sm text-agrix-forest">
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                        過去の案件を読み込み中...
+                    </div>
+                )}
+                {copyLoadError && (
+                    <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        {copyLoadError}
+                    </div>
+                )}
+                {copySourceTitle && !copyLoadError && (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-agrix-forest/30 bg-agrix-forest/10 px-4 py-3 text-sm text-agrix-forest">
+                        <Copy className="h-4 w-4 shrink-0" />
+                        {fromWorkRequestId
+                            ? '農家からの依頼を案件化します。品目・作業種別・作業内容は依頼内容で入力済みです。マスタにない項目は新規登録しました。必要に応じて編集してから作成してください。'
+                            : `「${copySourceTitle}」から内容をコピーしています。必要に応じて編集してから作成してください。`}
+                    </div>
+                )}
                 {/* Wizard Steps */}
                 <div className="flex items-center gap-2 mb-6 text-sm">
                     <span className="text-dashboard-muted font-medium">Step {step}/2</span>
@@ -334,23 +559,34 @@ export default function CampaignCreatePage() {
                         </label>
                         <p className="text-xs text-dashboard-muted mb-4">
                             地図で案件の対象エリアを囲んでください。描画したエリアの地名が自動的に「表示用地区名」に反映されます。
+                            {requestFieldPolygons.length > 0 && (
+                                <span className="ml-1 text-agrix-forest">（緑の枠は依頼された畑です）</span>
+                            )}
                         </p>
 
                         <div className="w-full h-[500px] rounded-xl overflow-hidden border border-dashboard-border">
                             <PolygonMap
                                 onPolygonComplete={handlePolygonComplete}
                                 initialPolygon={coords || undefined}
+                                referencePolygons={requestFieldPolygons.length > 0 ? requestFieldPolygons : undefined}
                                 initialCenter={
-                                    user && user.lat != null && user.lng != null
-                                        ? [user.lat, user.lng]
-                                        : undefined
+                                    requestFieldsMapCenter
+                                        ? requestFieldsMapCenter
+                                        : user && user.lat != null && user.lng != null
+                                            ? [user.lat, user.lng]
+                                            : undefined
                                 }
                                 initialAddress={
-                                    user && (user.lat == null || user.lng == null) && user.address
+                                    !requestFieldsMapCenter && user && (user.lat == null || user.lng == null) && user.address
                                         ? user.address
                                         : undefined
                                 }
                                 showAddressSearch
+                                onAddressSearchResult={(address) => {
+                                    if (address) {
+                                        setFormData((prev) => ({ ...prev, location: address }));
+                                    }
+                                }}
                             />
                         </div>
 
@@ -378,6 +614,7 @@ export default function CampaignCreatePage() {
 
                     {/* Step 2: Form Fields（スライドで表示） */}
                     <div
+                        ref={step2Ref}
                         className={`overflow-hidden transition-all duration-300 ease-out ${
                             step === 2
                                 ? 'opacity-100 translate-x-0 max-h-[9999px]'
@@ -585,6 +822,26 @@ export default function CampaignCreatePage() {
                                         />
                                     </div>
                                 </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-dashboard-text mb-1">
+                                        案件確定日（募集締切の条件） <span className="text-dashboard-muted text-xs font-bold px-2 py-0.5 rounded bg-dashboard-bg border border-dashboard-border ml-1">任意</span>
+                                    </label>
+                                    <p className="text-xs text-dashboard-muted mb-2">
+                                        開始日の何日前までに最低成立面積に達さないと不成立にするか指定します。0の場合はこの条件では締め切りません。
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={formData.confirmationDeadlineDays || ''}
+                                            onChange={(e) => setFormData({ ...formData, confirmationDeadlineDays: Math.max(0, Number(e.target.value) || 0) })}
+                                            placeholder="例: 7"
+                                            className="w-24 p-4 bg-dashboard-bg rounded-2xl border border-dashboard-border outline-none focus:ring-2 focus:ring-agrix-forest text-dashboard-text placeholder:text-dashboard-muted"
+                                        />
+                                        <span className="text-sm text-dashboard-muted font-medium">日前</span>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Pricing */}
@@ -694,5 +951,22 @@ export default function CampaignCreatePage() {
                 </form>
             </div>
         </main>
+    );
+}
+
+export default function CampaignCreatePage() {
+    return (
+        <Suspense
+            fallback={
+                <main className="min-h-full flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3 text-dashboard-muted">
+                        <Loader2 className="w-8 h-8 animate-spin" />
+                        <p className="text-sm">読み込み中...</p>
+                    </div>
+                </main>
+            }
+        >
+            <CampaignCreatePageContent />
+        </Suspense>
     );
 }
