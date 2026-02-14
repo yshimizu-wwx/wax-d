@@ -6,7 +6,7 @@
  * - 必須マスタ（crop / task_category / task_detail）を 1 件ずつ投入
  *
  * 実行: npm run test:seed
- * 必要: .env.local に NEXT_PUBLIC_SUPABASE_URL と NEXT_SUPABASE_SERVICE_ROLE_KEY（Legacy JWT 形式）
+ * 必要: .env.local に NEXT_PUBLIC_SUPABASE_URL と NEXT_SUPABASE_SERVICE_ROLE_KEY（Legacy JWT または Secret API key）
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -43,13 +43,6 @@ const SUPABASE_SERVICE_ROLE_KEY =
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error(
     'エラー: .env.local に NEXT_PUBLIC_SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY（または NEXT_SUPABASE_SERVICE_ROLE_KEY）を設定してください。'
-  );
-  process.exit(1);
-}
-
-if (SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_secret_')) {
-  console.error(
-    'エラー: RLS をバイパスするには Legacy の service_role キー（eyJ... で始まる JWT）を .env.local に設定してください。'
   );
   process.exit(1);
 }

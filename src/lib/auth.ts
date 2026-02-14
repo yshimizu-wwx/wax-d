@@ -24,16 +24,16 @@ export interface User {
  */
 export async function getCurrentUser(): Promise<User | null> {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { user } } = await supabase.auth.getUser();
 
-        if (!session?.user?.email) {
+        if (!user?.email) {
             return null;
         }
 
         const { data: userData, error } = await supabase
             .from('users')
             .select('*')
-            .eq('email', session.user.email)
+            .eq('email', user.email)
             .single();
 
         if (error || !userData) {
@@ -73,8 +73,8 @@ export async function signOut() {
  * Check if user is authenticated
  */
 export async function isAuthenticated(): Promise<boolean> {
-    const { data: { session } } = await supabase.auth.getSession();
-    return !!session;
+    const { data: { user } } = await supabase.auth.getUser();
+    return !!user;
 }
 
 /**
@@ -94,8 +94,8 @@ export async function updateUserProfile(updates: {
     address?: string;
 }): Promise<{ success: boolean; error?: string }> {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user?.email) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) {
             return { success: false, error: 'ログインしていません' };
         }
         const { error } = await supabase
@@ -105,7 +105,7 @@ export async function updateUserProfile(updates: {
                 ...(updates.phone !== undefined && { phone: updates.phone }),
                 ...(updates.address !== undefined && { address: updates.address }),
             })
-            .eq('email', session.user.email);
+            .eq('email', user.email);
         if (error) {
             return { success: false, error: error.message };
         }
@@ -121,15 +121,15 @@ export async function updateUserProfile(updates: {
  */
 export async function updateFarmerProductionCrops(cropIds: string[]): Promise<{ success: boolean; error?: string }> {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user?.email) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) {
             return { success: false, error: 'ログインしていません' };
         }
         const value = cropIds.length > 0 ? JSON.stringify(cropIds) : null;
         const { error } = await supabase
             .from('users')
             .update({ interested_crop_ids: value })
-            .eq('email', session.user.email);
+            .eq('email', user.email);
         if (error) {
             return { success: false, error: error.message };
         }

@@ -56,12 +56,12 @@ export async function middleware(req: NextRequest) {
     );
 
     const {
-        data: { session },
-    } = await supabase.auth.getSession();
+        data: { user },
+    } = await supabase.auth.getUser();
 
     // #region agent log
     if (req.nextUrl.pathname.startsWith('/api')) {
-        fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'middleware.ts', message: 'api request', data: { pathname: req.nextUrl.pathname, hasSession: !!session }, timestamp: Date.now(), hypothesisId: 'H1_middleware' }) }).catch(() => {});
+        fetch('http://127.0.0.1:7245/ingest/18abc857-b9fe-472f-879d-ab424fec0177', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'middleware.ts', message: 'api request', data: { pathname: req.nextUrl.pathname, hasSession: !!user }, timestamp: Date.now(), hypothesisId: 'H1_middleware' }) }).catch(() => {});
     }
     // #endregion
 
@@ -69,7 +69,7 @@ export async function middleware(req: NextRequest) {
     const publicRoutes = ['/login', '/auth/callback', '/auth/verified', '/auth/pending-approval'];
     const isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname.startsWith(route));
 
-    if (!session) {
+    if (!user) {
         if (isPublicRoute) return res;
         // #region agent log
         if (req.nextUrl.pathname.startsWith('/api')) {
@@ -83,7 +83,7 @@ export async function middleware(req: NextRequest) {
     const { data: userData } = await supabase
         .from('users')
         .select('role, status')
-        .eq('email', session.user.email)
+        .eq('email', user.email)
         .single();
 
     // Logged-in user on login page -> redirect to role-based dashboard or pending

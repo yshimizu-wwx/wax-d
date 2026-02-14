@@ -15,16 +15,16 @@ export async function GET(
 
   const supabase = await createClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.email) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) {
     return NextResponse.json({ error: '未ログインです' }, { status: 401 });
   }
 
   const { data: userRow } = await supabase
     .from('users')
     .select('id, role')
-    .eq('email', session.user.email)
+    .eq('email', user.email)
     .single();
 
   if (!userRow || (userRow as { role: string }).role !== 'farmer') {
