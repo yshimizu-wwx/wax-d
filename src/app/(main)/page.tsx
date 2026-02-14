@@ -31,6 +31,7 @@ import { getCurrentUser, type User } from '@/lib/auth';
 import { Project, type Field } from '@/types/database';
 import { isFieldInCampaignArea } from '@/lib/geo/spatial-queries';
 import { formatDateWithWeekday, getDefaultPeriod } from '@/lib/dateFormat';
+import { toUserFriendlyError } from '@/lib/errorMessage';
 import type { Polygon } from 'geojson';
 import type { FarmerFormData } from '@/components/CampaignForm';
 import CampaignTimelineCard, { type CampaignWithArea } from '@/components/CampaignTimelineCard';
@@ -96,16 +97,33 @@ export default function Home() {
   // 未ログイン: 公開案件一覧（募集中のみ）
   useEffect(() => {
     if (userLoading || user) return;
-    fetchCampaigns({ status: 'open' }).then(setOpenCampaigns).finally(() => setLoading(false));
+    fetchCampaigns({ status: 'open' })
+      .then(setOpenCampaigns)
+      .catch((err) => {
+        console.error('fetchCampaigns(open):', err);
+        toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+        setOpenCampaigns([]);
+      })
+      .finally(() => setLoading(false));
   }, [userLoading, user]);
 
   // 農家: 紐付き業者一覧・申込履歴・畑を取得
   useEffect(() => {
     if (userLoading || !user || user.role !== 'farmer') return;
     setLoading(false); // 業者選択画面ではローダーを出さない
-    fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
-    fetchBookingsByFarmer(user.id).then(setFarmerBookings);
-    fetchFieldsByFarmer(user.id).then(setFarmerFields);
+    const onError = (err: unknown, label: string) => {
+      console.error(label, err);
+      toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+    };
+    fetchLinkedProvidersForFarmer(user.id)
+      .then(setLinkedProviders)
+      .catch((err) => { onError(err, 'fetchLinkedProvidersForFarmer'); setLinkedProviders([]); });
+    fetchBookingsByFarmer(user.id)
+      .then(setFarmerBookings)
+      .catch((err) => { onError(err, 'fetchBookingsByFarmer'); setFarmerBookings([]); });
+    fetchFieldsByFarmer(user.id)
+      .then(setFarmerFields)
+      .catch((err) => { onError(err, 'fetchFieldsByFarmer'); setFarmerFields([]); });
   }, [userLoading, user]);
 
   // 農家: 選択した業者の案件のみ取得（業者を選んだとき）
@@ -137,6 +155,12 @@ export default function Home() {
           const still = withArea.find((c) => c.id === prev.id);
           return still ?? first;
         });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchCampaigns(provider):', err);
+        toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+        setAllCampaignsWithArea([]);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -256,7 +280,12 @@ export default function Home() {
     const result = await createBooking(bookingData);
     if (result.success) {
       toast.success(`予約が完了しました。予約ID: ${result.bookingId}`);
-      if (user?.id) fetchBookingsByFarmer(user.id).then(setFarmerBookings);
+      if (user?.id) {
+        fetchBookingsByFarmer(user.id).then(setFarmerBookings).catch((err) => {
+          console.error('fetchBookingsByFarmer (after booking):', err);
+          toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+        });
+      }
       setAllCampaignsWithArea((prev) =>
         prev.map((c) =>
           c.id === selectedCampaign.id
@@ -312,7 +341,12 @@ export default function Home() {
 
     const count = data.selections.length;
     toast.success(count > 1 ? `${count}件の申し込みが完了しました` : '申し込みが完了しました');
-    fetchBookingsByFarmer(user.id).then(setFarmerBookings);
+    fetchBookingsByFarmer(user.id)
+      .then(setFarmerBookings)
+      .catch((err) => {
+        console.error('fetchBookingsByFarmer (after application):', err);
+        toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+      });
     setAllCampaignsWithArea((prev) =>
       prev.map((c) =>
         c.id === campaign.id ? { ...c, totalArea10r: (c.totalArea10r ?? 0) + totalNewArea } : c
@@ -325,7 +359,12 @@ export default function Home() {
     const result = await requestCancelBooking(bookingId, user.id);
     if (result.success) {
       toast.success('キャンセル依頼を送りました。業者に連絡が入ります。');
-      fetchBookingsByFarmer(user.id).then(setFarmerBookings);
+      fetchBookingsByFarmer(user.id)
+        .then(setFarmerBookings)
+        .catch((err) => {
+          console.error('fetchBookingsByFarmer (after cancel):', err);
+          toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+        });
     } else {
       toast.error(result.error || 'キャンセル依頼に失敗しました');
     }

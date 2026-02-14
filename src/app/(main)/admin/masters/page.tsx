@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Package,
   Layers,
@@ -45,13 +45,13 @@ export default function MastersPage() {
 
   const providerId = user?.role === 'provider' ? user.id : user?.role === 'admin' ? null : null;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (providerId === undefined) return;
     setRefreshing(true);
     const list = await fetchMasters(activeTab, providerId);
     setItems(list);
     setRefreshing(false);
-  };
+  }, [providerId, activeTab]);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -62,7 +62,7 @@ export default function MastersPage() {
 
   useEffect(() => {
     if (user) load();
-  }, [user, activeTab]);
+  }, [user, load]);
 
   const formatMasterError = (error?: string) => {
     if (!error) return '操作に失敗しました';

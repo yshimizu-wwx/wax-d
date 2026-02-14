@@ -5,15 +5,27 @@ import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
-import { createCampaign, fetchCampaignById, fetchWorkRequestById, setWorkRequestConverted } from '@/lib/api';
+import { createCampaign, fetchCampaignById, fetchWorkRequestById, setWorkRequestRejected } from '@/lib/api';
 import { fetchMasters, createMaster } from '@/lib/masters';
 import type { Master } from '@/types/database';
 import type { Polygon } from 'geojson';
-import { parseCampaignPolygon } from '@/lib/geo/spatial-queries';
+import { parseCampaignPolygon, parseFieldGeometry } from '@/lib/geo/spatial-queries';
 import { calculatePolygonArea10r, getPolygonCenter } from '@/lib/geo/areaCalculator';
-import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
+
+/** GeoJSON の ring（[lng,lat] または稀に [lat,lng]）を Leaflet 用 { lat, lng }[] に。ずれ防止のため座標順を判定 */
+function ringToLeafletCoords(ring: [number, number][]): { lat: number; lng: number }[] {
+    if (!ring?.length) return [];
+    const [a, b] = ring[0];
+    const inJapanLng = (x: number) => x >= 128 && x <= 148;
+    const inJapanLat = (x: number) => x >= 30 && x <= 46;
+    const isLngLat = inJapanLng(a) && inJapanLat(b);
+    const isLatLng = inJapanLat(a) && inJapanLng(b);
+    if (isLatLng && !isLngLat) return ring.map(([lat, lng]) => ({ lat, lng }));
+    return ring.map(([lng, lat]) => ({ lat, lng }));
+}
+import { reverseGeocodeViaApi, geocodeAddressViaApi } from '@/lib/geo/geocodeClient';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ArrowRight, ArrowLeft, Copy } from 'lucide-react';
+import { Loader2, ArrowRight, ArrowLeft, Copy, XCircle } from 'lucide-react';
 import type { Project } from '@/types/database';
 
 // Dynamically import PolygonMap to avoid SSR issues
@@ -102,6 +114,11 @@ function CampaignCreatePageContent() {
     const [requestFieldPolygons, setRequestFieldPolygons] = useState<{ lat: number; lng: number }[][]>([]);
     /** 依頼畑の中心（地図の初期表示で使用） */
     const [requestFieldsMapCenter, setRequestFieldsMapCenter] = useState<[number, number] | null>(null);
+    /** 依頼の住所（畑が無い場合にジオコードしてマップに表示するため） */
+    const [workRequestLocation, setWorkRequestLocation] = useState<string | null>(null);
+    /** 依頼に紐づく畑の取得が完了したか（空でも true） */
+    const [requestFieldsFetched, setRequestFieldsFetched] = useState(false);
+    const [rejecting, setRejecting] = useState(false);
     /** Step 2 ブロックへのスクロール用 */
     const step2Ref = useRef<HTMLDivElement>(null);
 
@@ -206,6 +223,7 @@ function CampaignCreatePageContent() {
                 setCopyLoading(false);
                 return;
             }
+            setWorkRequestLocation(wr.location ?? null);
             setCopySourceTitle(`依頼から作成: ${cropName || categoryName || '（内容未指定）'}`);
             setFormData((prev) => ({
                 ...prev,
@@ -229,18 +247,21 @@ function CampaignCreatePageContent() {
         let cancelled = false;
         fetch(`/api/provider/work-requests/${encodeURIComponent(fromWorkRequestId)}/fields`)
             .then((res) => (res.ok ? res.json() : Promise.reject(new Error('畑の取得に失敗しました'))))
-            .then((fields: { lat?: number | null; lng?: number | null; area_coordinates?: string | null }[]) => {
+            .then((fields: { lat?: number | null; lng?: number | null; area_coordinates?: string | null | unknown }[]) => {
                 if (cancelled || !Array.isArray(fields)) return;
                 const polygons: { lat: number; lng: number }[][] = [];
                 let firstCenter: [number, number] | null = null;
                 fields.forEach((f) => {
-                    const poly = parseCampaignPolygon(f.area_coordinates);
+                    const poly = typeof f.area_coordinates === 'object' && f.area_coordinates !== null
+                        ? parseFieldGeometry(f.area_coordinates as { type?: string; coordinates?: unknown })
+                        : parseCampaignPolygon(f.area_coordinates);
                     if (poly && poly.coordinates[0]?.length) {
-                        const coords = poly.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
+                        const coords = ringToLeafletCoords(poly.coordinates[0] as [number, number][]);
                         polygons.push(coords);
-                        if (!firstCenter) {
-                            const [lng, lat] = getPolygonCenter(poly);
-                            firstCenter = [lat, lng];
+                        if (!firstCenter && coords.length) {
+                            const avgLat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+                            const avgLng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+                            firstCenter = [avgLat, avgLng];
                         }
                     } else if (f.lat != null && f.lng != null) {
                         const lat = Number(f.lat);
@@ -255,13 +276,32 @@ function CampaignCreatePageContent() {
                 if (!cancelled) {
                     setRequestFieldPolygons(polygons);
                     setRequestFieldsMapCenter(firstCenter);
+                    setRequestFieldsFetched(true);
                 }
             })
             .catch(() => {
-                if (!cancelled) setRequestFieldPolygons([]);
+                if (!cancelled) {
+                    setRequestFieldPolygons([]);
+                    setRequestFieldsFetched(true);
+                }
             });
         return () => { cancelled = true; };
     }, [fromWorkRequestId, providerId]);
+
+    // 依頼に畑が紐づいていない場合、住所をジオコードして地図の初期中心だけ合わせる（枠は描かない＝緑の枠は農家登録畑のみ）
+    const locationFallbackDoneRef = useRef(false);
+    useEffect(() => {
+        if (!fromWorkRequestId || !requestFieldsFetched || requestFieldPolygons.length > 0 || !workRequestLocation?.trim() || locationFallbackDoneRef.current) return;
+        locationFallbackDoneRef.current = true;
+        let cancelled = false;
+        geocodeAddressViaApi(workRequestLocation)
+            .then((res) => {
+                if (cancelled || !res) return;
+                setRequestFieldsMapCenter([res.lat, res.lng]);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [fromWorkRequestId, requestFieldsFetched, workRequestLocation, requestFieldPolygons.length]);
 
     const masterProviderId = user?.role === 'provider' ? user?.id ?? null : null;
     useEffect(() => {
@@ -417,6 +457,25 @@ function CampaignCreatePageContent() {
         if (step === 2) setStep(1);
     };
 
+    const handleReject = async () => {
+        if (!fromWorkRequestId || !providerId) return;
+        if (!window.confirm('この依頼を案件化せずに拒否しますか？拒否すると依頼一覧では「拒否」と表示されます。')) return;
+        setRejecting(true);
+        try {
+            const result = await setWorkRequestRejected(fromWorkRequestId, providerId);
+            if (result.success) {
+                toast.success('依頼を拒否しました');
+                window.location.href = '/admin';
+            } else {
+                toast.error(result.error || '拒否に失敗しました');
+            }
+        } catch {
+            toast.error('拒否に失敗しました');
+        } finally {
+            setRejecting(false);
+        }
+    };
+
     const detailOptions = useMemo(() => {
         if (!formData.categoryId) return [];
         return taskDetails.filter(
@@ -460,11 +519,30 @@ function CampaignCreatePageContent() {
                 providerId || undefined
             );
 
-            if (result.success) {
-                if (fromWorkRequestId && providerId && result.campaignId) {
-                    await setWorkRequestConverted(fromWorkRequestId, providerId, result.campaignId);
+            if (result.success && result.campaignId) {
+                if (fromWorkRequestId) {
+                    const wrId = String(fromWorkRequestId).trim();
+                    const res = await fetch(
+                        `/api/provider/work-requests/${encodeURIComponent(wrId)}/create-initial-booking`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ campaignId: result.campaignId }),
+                            credentials: 'include',
+                        }
+                    );
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        if (res.status === 404) {
+                            window.location.href = '/admin?warn=initial-booking-failed';
+                            return;
+                        }
+                        toast.error(data?.error || '依頼農家の申込登録に失敗しました');
+                        setIsSubmitting(false);
+                        return;
+                    }
                 }
-                toast.success('案件を作成しました');
+                toast.success(fromWorkRequestId ? '案件を作成しました。依頼した農家を最初の申込として登録しました。' : '案件を作成しました');
                 window.location.href = '/admin';
             } else {
                 toast.error(result.error || '案件の作成に失敗しました');
@@ -489,12 +567,25 @@ function CampaignCreatePageContent() {
                             </h1>
                             <p className="text-dashboard-muted text-sm font-medium mt-1">業者用 - 募集案件を作成</p>
                         </div>
-                        <button
-                            onClick={() => window.history.back()}
-                            className="text-dashboard-muted hover:text-dashboard-text font-bold text-sm"
-                        >
-                            ← 戻る
-                        </button>
+                        <div className="flex items-center gap-3">
+                            {fromWorkRequestId && (
+                                <button
+                                    type="button"
+                                    onClick={handleReject}
+                                    disabled={rejecting}
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-destructive/50 text-destructive hover:bg-destructive/10 font-bold text-sm transition-colors disabled:opacity-50"
+                                >
+                                    <XCircle className="w-4 h-4" />
+                                    {rejecting ? '処理中...' : '案件化しない（拒否）'}
+                                </button>
+                            )}
+                            <button
+                                onClick={() => window.history.back()}
+                                className="text-dashboard-muted hover:text-dashboard-text font-bold text-sm"
+                            >
+                                ← 戻る
+                            </button>
+                        </div>
                     </div>
                 </div>
                 {/* 細いプログレスバー（Step 1/2 → 50%, Step 2/2 → 100%） */}
@@ -559,9 +650,11 @@ function CampaignCreatePageContent() {
                         </label>
                         <p className="text-xs text-dashboard-muted mb-4">
                             地図で案件の対象エリアを囲んでください。描画したエリアの地名が自動的に「表示用地区名」に反映されます。
-                            {requestFieldPolygons.length > 0 && (
-                                <span className="ml-1 text-agrix-forest">（緑の枠は依頼された畑です）</span>
-                            )}
+                            {requestFieldPolygons.length > 0 ? (
+                                <span className="ml-1 text-destructive font-medium">（赤い枠は農家が依頼時に登録した畑の範囲です）</span>
+                            ) : fromWorkRequestId ? (
+                                <span className="ml-1 text-dashboard-muted">（依頼時に畑が選択されていない場合は、地図で対象エリアを囲んでください）</span>
+                            ) : null}
                         </p>
 
                         <div className="w-full h-[500px] rounded-xl overflow-hidden border border-dashboard-border">
@@ -854,16 +947,16 @@ function CampaignCreatePageContent() {
                                         <p className="text-xs text-dashboard-muted mb-2">
                                             申込が少ないときの単価。申込が増えるとこの価格から下がっていきます。
                                         </p>
-                                        <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest">
+                                        <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest overflow-hidden">
                                             <input
                                                 type="number"
                                                 value={formData.basePrice || ''}
                                                 onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
                                                 placeholder="例: 20000"
-                                                className="flex-1 p-4 text-sm font-bold outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
+                                                className="min-w-0 flex-1 p-4 py-3 text-sm font-bold outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                                 required
                                             />
-                                            <span className="px-3 text-sm text-dashboard-muted font-bold">¥/10R</span>
+                                            <span className="shrink-0 min-w-[4.5rem] px-3 py-3 text-sm text-dashboard-muted font-bold whitespace-nowrap flex items-center justify-end">¥/10R</span>
                                         </div>
                                     </div>
                                     <div>
@@ -873,16 +966,16 @@ function CampaignCreatePageContent() {
                                         <p className="text-xs text-dashboard-muted mb-2">
                                             目標面積に達したときの単価（一番安くなる価格）。
                                         </p>
-                                        <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest">
+                                        <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest overflow-hidden">
                                             <input
                                                 type="number"
                                                 value={formData.minPrice || ''}
                                                 onChange={(e) => setFormData({ ...formData, minPrice: Number(e.target.value) })}
                                                 placeholder="例: 15000"
-                                                className="flex-1 p-4 text-sm font-bold outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
+                                                className="min-w-0 flex-1 p-4 py-3 text-sm font-bold outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                                 required
                                             />
-                                            <span className="px-3 text-sm text-dashboard-muted font-bold">¥/10R</span>
+                                            <span className="shrink-0 min-w-[4.5rem] px-3 py-3 text-sm text-dashboard-muted font-bold whitespace-nowrap flex items-center justify-end">¥/10R</span>
                                         </div>
                                     </div>
                                 </div>
@@ -896,7 +989,7 @@ function CampaignCreatePageContent() {
                                 <p className="text-xs text-dashboard-muted mb-2">
                                     この面積に達しないと成立しません。空欄の場合は従来どおり目標面積に達したら成立します。単位は10R（10R＝1反）。
                                 </p>
-                                <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest mb-4">
+                                <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest mb-4 overflow-hidden">
                                     <input
                                         type="number"
                                         step="0.1"
@@ -904,9 +997,9 @@ function CampaignCreatePageContent() {
                                         value={formData.minTargetArea10r || ''}
                                         onChange={(e) => setFormData({ ...formData, minTargetArea10r: Number(e.target.value) || 0 })}
                                         placeholder="例: 30（空欄可）"
-                                        className="flex-1 p-4 text-sm outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
+                                        className="min-w-0 flex-1 p-4 py-3 text-sm outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                     />
-                                    <span className="px-3 text-sm text-dashboard-muted font-bold">10R</span>
+                                    <span className="shrink-0 min-w-[3rem] px-3 py-3 text-sm text-dashboard-muted font-bold whitespace-nowrap flex items-center justify-end">10R</span>
                                 </div>
 
                                 <label className="block text-sm font-bold text-dashboard-text mb-1">
@@ -915,7 +1008,7 @@ function CampaignCreatePageContent() {
                                 <p className="text-xs text-dashboard-muted mb-2">
                                     この案件で集めたい総面積（10R単位）。申込が増えると単価が目標単価まで下がります。
                                 </p>
-                                <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest">
+                                <div className="flex items-center bg-dashboard-card rounded-2xl border border-dashboard-border focus-within:ring-2 focus-within:ring-agrix-forest overflow-hidden">
                                     <input
                                         type="number"
                                         step="0.1"
@@ -923,10 +1016,10 @@ function CampaignCreatePageContent() {
                                         value={formData.targetArea10r || ''}
                                         onChange={(e) => setFormData({ ...formData, targetArea10r: Number(e.target.value) })}
                                         placeholder="例: 50"
-                                        className="flex-1 p-4 text-sm outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
+                                        className="min-w-0 flex-1 p-4 py-3 text-sm outline-none rounded-l-2xl bg-dashboard-card text-dashboard-text placeholder:text-dashboard-muted"
                                         required
                                     />
-                                    <span className="px-3 text-sm text-dashboard-muted font-bold">10R</span>
+                                    <span className="shrink-0 min-w-[3rem] px-3 py-3 text-sm text-dashboard-muted font-bold whitespace-nowrap flex items-center justify-end">10R</span>
                                 </div>
                             </div>
 

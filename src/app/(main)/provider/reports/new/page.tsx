@@ -85,6 +85,8 @@ export default function ProviderReportsNewPage() {
       }
       setLoading(false);
     })();
+  // 初回マウント時のみ実行。bookingId を deps に含めると初回セット後に再実行され意図しない挙動になるため除外
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const captureGps = () => {

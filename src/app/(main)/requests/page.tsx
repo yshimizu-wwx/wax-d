@@ -18,6 +18,7 @@ import type { LinkedProvider } from '@/lib/api';
 import AppLoader from '@/components/AppLoader';
 import WorkRequestForm from '@/components/WorkRequestForm';
 import { formatDateWithWeekday, formatDateTimeWithWeekday } from '@/lib/dateFormat';
+import { toUserFriendlyError } from '@/lib/errorMessage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -43,12 +44,23 @@ function RequestsPageContent() {
     });
   }, []);
 
+  const onFetchError = useCallback((err: unknown, label: string) => {
+    console.error(label, err);
+    toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
   const loadData = useCallback(() => {
     if (!user || user.role !== 'farmer') return;
-    fetchWorkRequestsByFarmer(user.id).then(setRequests);
-    fetchFieldsByFarmer(user.id).then(setFields);
-    fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
-  }, [user]);
+    fetchWorkRequestsByFarmer(user.id)
+      .then(setRequests)
+      .catch((err) => { onFetchError(err, 'fetchWorkRequestsByFarmer'); setRequests([]); });
+    fetchFieldsByFarmer(user.id)
+      .then(setFields)
+      .catch((err) => { onFetchError(err, 'fetchFieldsByFarmer'); setFields([]); });
+    fetchLinkedProvidersForFarmer(user.id)
+      .then(setLinkedProviders)
+      .catch((err) => { onFetchError(err, 'fetchLinkedProvidersForFarmer'); setLinkedProviders([]); });
+  }, [user, onFetchError]);
 
   useEffect(() => {
     loadData();
@@ -57,20 +69,26 @@ function RequestsPageContent() {
   // マイページで紐づけした直後に ?linked=1 で遷移してきた場合、紐付き業者を確実に再取得
   useEffect(() => {
     if (!user || user.role !== 'farmer' || searchParams.get('linked') !== '1') return;
-    const refetch = () => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    const refetch = () =>
+      fetchLinkedProvidersForFarmer(user.id)
+        .then(setLinkedProviders)
+        .catch((err) => { onFetchError(err, 'fetchLinkedProvidersForFarmer (refetch)'); setLinkedProviders([]); });
     refetch();
     const t = window.setTimeout(refetch, 400);
     router.replace('/requests', { scroll: false });
     return () => window.clearTimeout(t);
-  }, [user, searchParams, router]);
+  }, [user, searchParams, router, onFetchError]);
 
   // 他タブで紐づけしたあとこのタブに戻ったときに再取得する
   useEffect(() => {
     if (!user || user.role !== 'farmer') return;
-    const onFocus = () => fetchLinkedProvidersForFarmer(user.id).then(setLinkedProviders);
+    const onFocus = () =>
+      fetchLinkedProvidersForFarmer(user.id)
+        .then(setLinkedProviders)
+        .catch((err) => { onFetchError(err, 'fetchLinkedProvidersForFarmer (focus)'); setLinkedProviders([]); });
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [user]);
+  }, [user, onFetchError]);
 
   useEffect(() => {
     if (loading || !user) return;
@@ -84,7 +102,9 @@ function RequestsPageContent() {
     const result = await createWorkRequest(data);
     if (result.success) {
       toast.success('作業依頼を送信しました');
-      fetchWorkRequestsByFarmer(user.id).then(setRequests);
+      fetchWorkRequestsByFarmer(user.id)
+        .then(setRequests)
+        .catch((err) => { onFetchError(err, 'fetchWorkRequestsByFarmer (after submit)'); setRequests([]); });
     } else {
       toast.error(result.error || '送信に失敗しました');
       throw new Error(result.error);
@@ -142,6 +162,7 @@ function RequestsPageContent() {
               farmerId={user.id}
               fields={fields}
               linkedProviders={linkedProviders}
+              lastRequest={requests.length > 0 ? requests[0] : null}
               onSubmit={handleSubmit}
               onRefetchRequested={async () => {
                 const list = await fetchLinkedProvidersForFarmer(user.id);
