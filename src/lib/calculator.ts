@@ -24,7 +24,7 @@ export interface TaxResult {
 /**
  * Helper to convert value to number safely
  */
-function toNumber(value: any): number {
+function toNumber(value: unknown): number {
     if (value === null || value === undefined || value === '') return 0;
     const num = Number(value);
     return isNaN(num) ? 0 : num;

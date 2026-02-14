@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Sprout, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
+import { Sprout, Plus, Pencil, Trash2, MapPin, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, type User } from '@/lib/auth';
 import {
@@ -18,6 +18,7 @@ import type { Field } from '@/types/database';
 import type { Polygon } from 'geojson';
 import { getPolygonCenter } from '@/lib/geo/areaCalculator';
 import { stripJapanFromDisplayAddress } from '@/lib/geo/addressFormat';
+import { toUserFriendlyError } from '@/lib/errorMessage';
 import { reverseGeocodeViaApi } from '@/lib/geo/geocodeClient';
 import AppLoader from '@/components/AppLoader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -68,7 +69,13 @@ export default function MyFieldsPage() {
 
   useEffect(() => {
     if (!user || user.role !== 'farmer') return;
-    fetchFieldsByFarmer(user.id).then(setFields);
+    fetchFieldsByFarmer(user.id)
+      .then(setFields)
+      .catch((err) => {
+        console.error('fetchFieldsByFarmer:', err);
+        toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+        setFields([]);
+      });
   }, [user]);
 
   useEffect(() => {
@@ -95,6 +102,8 @@ export default function MyFieldsPage() {
     setFormName(f.name || '');
     setFormAddress(stripJapanFromDisplayAddress(f.address) || '');
     setFormAreaSize(f.area_size != null ? String(f.area_size) : '');
+    setFormLat(f.lat ?? null);
+    setFormLng(f.lng ?? null);
     setShowForm(true);
   };
 
@@ -170,7 +179,12 @@ export default function MyFieldsPage() {
         });
         if (result.success) {
           toast.success('畑を更新しました');
-          fetchFieldsByFarmer(user.id).then(setFields);
+          fetchFieldsByFarmer(user.id)
+            .then(setFields)
+            .catch((err) => {
+              console.error('fetchFieldsByFarmer (after update):', err);
+              toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+            });
           closeForm();
         } else {
           toast.error(result.error);
@@ -199,7 +213,12 @@ export default function MyFieldsPage() {
         const result = await createField(data);
         if (result.success) {
           toast.success('畑を登録しました');
-          fetchFieldsByFarmer(user.id).then(setFields);
+          fetchFieldsByFarmer(user.id)
+            .then(setFields)
+            .catch((err) => {
+              console.error('fetchFieldsByFarmer (after create):', err);
+              toast.error(toUserFriendlyError(err instanceof Error ? err.message : String(err)));
+            });
           closeForm();
         } else {
           toast.error(result.error);
@@ -322,7 +341,9 @@ export default function MyFieldsPage() {
                 {!editingId && (
                   <div className="space-y-1 shrink-0">
                     <Label>地図で範囲を選択</Label>
-                    <p className="text-xs text-dashboard-muted">地図上でポリゴン（多角形）を描くと面積が自動計算されます。</p>
+                    <p className="text-xs text-dashboard-muted">
+                      地図上でポリゴン（多角形）を描くと面積が自動計算されます。この枠は申し込んだ業者に共有され、作業時に地図で範囲を確認しながら作業する目安になります。
+                    </p>
                     <div className="w-full min-h-[280px] rounded-lg overflow-hidden border border-dashboard-border">
                       <PolygonMap
                         onPolygonComplete={handlePolygonComplete}
@@ -352,9 +373,29 @@ export default function MyFieldsPage() {
                     className="mt-1 bg-white text-slate-900 border-slate-200 placeholder:text-slate-500 focus-visible:ring-agrix-forest"
                   />
                 </div>
+                {(formLat != null && formLng != null) && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-100 p-4 space-y-2">
+                    <Label className="text-slate-800">位置（緯度・経度）</Label>
+                    <p className="text-sm font-mono text-slate-800 tabular-nums">
+                      緯度 {formLat.toFixed(6)} / 経度 {formLng.toFixed(6)}
+                    </p>
+                    <a
+                      href={`https://www.google.com/maps?q=${formLat},${formLng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-agrix-forest hover:text-agrix-forest-dark hover:underline focus:outline-none focus:ring-2 focus:ring-agrix-forest/50 rounded px-2 py-1 -ml-2 transition-all duration-200"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Googleマップで開く
+                    </a>
+                    <p className="text-xs text-slate-600">
+                      申し込んだ業者はこの緯度経度をベースにナビで移動し、登録した枠（範囲）を地図で確認しながら作業します。
+                    </p>
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center justify-between gap-2 mt-1">
-                    <Label htmlFor="fieldAddress" className="shrink-0">住所・場所</Label>
+                    <Label htmlFor="fieldAddress" className="shrink-0">住所・地番</Label>
                     {!editingId && formLat != null && formLng != null && (
                       <Button
                         type="button"
@@ -396,8 +437,8 @@ export default function MyFieldsPage() {
                   />
                 </div>
               </div>
-              <DialogFooter className="shrink-0 px-6 py-4 border-t border-dashboard-border bg-dashboard-card/50">
-                <Button type="button" variant="outline" onClick={closeForm}>
+              <DialogFooter className="shrink-0 px-6 py-4 border-t border-slate-200 bg-slate-50">
+                <Button type="button" variant="outline" onClick={closeForm} className="border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900">
                   キャンセル
                 </Button>
                 <Button type="submit" disabled={submitting} className="bg-agrix-forest hover:bg-agrix-forest-dark">

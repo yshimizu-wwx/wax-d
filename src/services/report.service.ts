@@ -137,6 +137,12 @@ export async function submitWorkReport(
       dilution_rate: string | number | null;
       amount_per_10r: string | number | null;
     };
+    // 数値型カラムに空文字を渡さない（PostgreSQL "invalid input syntax for type numeric" 防止）
+    const gpsLat = input.gps != null ? Number(input.gps.lat) : NaN;
+    const gpsLng = input.gps != null ? Number(input.gps.lng) : NaN;
+    const gpsLatNum = Number.isFinite(gpsLat) ? gpsLat : null;
+    const gpsLngNum = Number.isFinite(gpsLng) ? gpsLng : null;
+
     const { error: insertError } = await supabase.from('work_reports').insert({
       id: reportId,
       application_id: input.bookingId,
@@ -146,8 +152,8 @@ export async function submitWorkReport(
       photo_urls_json: imageUrl ? JSON.stringify([imageUrl]) : '',
       reported_at: new Date().toISOString(),
       reporter_id: providerId,
-      gps_lat: input.gps?.lat ?? null,
-      gps_lng: input.gps?.lng ?? null,
+      gps_lat: gpsLatNum,
+      gps_lng: gpsLngNum,
       reported_at_iso: new Date().toISOString(),
     });
 

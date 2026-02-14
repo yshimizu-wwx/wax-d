@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, FeatureGroup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
-import { leafletLayerToGeoJSON, calculatePolygonArea10r } from '@/lib/geo/areaCalculator';
+import { leafletLayerToGeoJSON, calculatePolygonArea10r, type LeafletDrawLayer } from '@/lib/geo/areaCalculator';
 import { geocodeAddressViaApi } from '@/lib/geo/geocodeClient';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import type { Polygon } from 'geojson';
@@ -72,12 +72,13 @@ interface MapControllerProps extends PolygonMapProps {
     flyTo?: [number, number] | null;
 }
 
+/** 依頼された畑の参照枠：赤で視認しやすく */
 const REFERENCE_POLYGON_STYLE = {
-    color: '#0d9488',
-    fillColor: '#0d9488',
-    fillOpacity: 0.25,
-    weight: 2,
-    dashArray: '6, 4'
+    color: '#dc2626',
+    fillColor: '#ef4444',
+    fillOpacity: 0.35,
+    weight: 3,
+    dashArray: ''
 };
 
 function MapController({ onPolygonComplete, initialPolygon, referencePolygons, flyTo }: MapControllerProps) {
@@ -176,17 +177,16 @@ function MapController({ onPolygonComplete, initialPolygon, referencePolygons, f
         map.addControl(drawControl);
 
         // Event Handlers
-        map.on(L.Draw.Event.CREATED, (e: any) => {
+        map.on(L.Draw.Event.CREATED, (e: L.LeafletEvent & { layer: L.Layer }) => {
             const layer = e.layer;
             drawnItems.clearLayers(); // Only allow one polygon
             drawnItems.addLayer(layer);
 
-            const latlngs = layer.getLatLngs()[0] as { lat: number, lng: number }[];
-            // Convert to array of {lat, lng} objects if needed, Leaflet usually returns LatLng objects
-            const coords = latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+            const latlngs = layer.getLatLngs()[0] as { lat: number; lng: number }[];
+            const coords = latlngs.map((ll) => ({ lat: ll.lat, lng: ll.lng }));
 
-            // Use the proper geo calculator with Turf.js
-            const polygon = leafletLayerToGeoJSON(layer);
+            // Use the proper geo calculator with Turf.js（layer は getLatLngs を持つ draw レイヤー）
+            const polygon = leafletLayerToGeoJSON(layer as unknown as LeafletDrawLayer);
             const area10r = calculatePolygonArea10r(polygon);
 
             onPolygonComplete(coords, area10r, polygon);
@@ -213,6 +213,7 @@ export default function PolygonMap(props: PolygonMapProps) {
         initialCenter,
         initialAddress,
         showAddressSearch = false,
+        onAddressSearchResult,
     } = props;
 
     const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
@@ -265,7 +266,7 @@ export default function PolygonMap(props: PolygonMapProps) {
                 setIsFlying(true);
                 setTimeout(() => setIsFlying(false), 600);
                 // 検索結果の住所・座標を親に渡し、フォームの「住所・場所」に同期
-                props.onAddressSearchResult?.(result.displayName ?? q, result.lat, result.lng);
+                onAddressSearchResult?.(result.displayName ?? q, result.lat, result.lng);
             } else {
                 setSearchError('住所が見つかりませんでした。別のキーワードで試してください。');
             }
@@ -274,7 +275,7 @@ export default function PolygonMap(props: PolygonMapProps) {
         } finally {
             setSearchLoading(false);
         }
-    }, [addressQuery, clearGeoError, props.onAddressSearchResult]);
+    }, [addressQuery, clearGeoError, onAddressSearchResult]);
 
     const handleCurrentLocation = useCallback(async () => {
         setSearchError(null);

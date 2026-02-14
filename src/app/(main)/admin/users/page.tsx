@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Users,
   UserCheck,
@@ -16,6 +16,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import AppLoader from '@/components/AppLoader';
 import { formatDateWithWeekday } from '@/lib/dateFormat';
+import { toUserFriendlyError } from '@/lib/errorMessage';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface PendingUser {
@@ -46,7 +47,7 @@ export default function AdminUsersPage() {
     getCurrentUser().then(setUser).finally(() => setLoading(false));
   }, []);
 
-  const loadPending = async () => {
+  const loadPending = useCallback(async () => {
     const { data, error } = await supabase
       .from('users')
       .select('id, email, name, role, status, created_at')
@@ -54,15 +55,17 @@ export default function AdminUsersPage() {
       .order('created_at', { ascending: false });
     if (error) {
       console.error(error);
+      toast.error(toUserFriendlyError(error.message));
       return;
     }
     setPendingUsers((data as PendingUser[]) || []);
-  };
+  }, []);
 
-  const loadLinkedFarmers = async () => {
+  const loadLinkedFarmers = useCallback(async () => {
     const { data, error } = await supabase.rpc('get_linked_farmers_for_current_provider');
     if (error) {
       console.error('get_linked_farmers_for_current_provider:', error);
+      toast.error(toUserFriendlyError(error.message));
       setLinkedFarmers([]);
       return;
     }
@@ -74,7 +77,7 @@ export default function AdminUsersPage() {
       created_at: typeof r.created_at === 'string' ? r.created_at : (r.created_at ? String(r.created_at) : ''),
     }));
     setLinkedFarmers(list);
-  };
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -86,7 +89,19 @@ export default function AdminUsersPage() {
     } else {
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, loadPending, loadLinkedFarmers]);
+
+  const updateUserStatus = useCallback(async (userId: string, status: 'active' | 'rejected') => {
+    setActingId(userId);
+    const { error } = await supabase.from('users').update({ status }).eq('id', userId);
+    setActingId(null);
+    if (error) {
+      toast.error(error.message || '更新に失敗しました');
+      return;
+    }
+    toast.success(status === 'active' ? '承認しました' : '却下しました');
+    loadPending();
+  }, [loadPending]);
 
   const pendingColumns = useMemo<ColumnDef<PendingUser>[]>(
     () => [
@@ -126,7 +141,7 @@ export default function AdminUsersPage() {
         ),
       },
     ],
-    [actingId]
+    [actingId, updateUserStatus]
   );
 
   const linkedColumns = useMemo<ColumnDef<LinkedFarmer>[]>(
@@ -142,18 +157,6 @@ export default function AdminUsersPage() {
     ],
     []
   );
-
-  const updateUserStatus = async (userId: string, status: 'active' | 'rejected') => {
-    setActingId(userId);
-    const { error } = await supabase.from('users').update({ status }).eq('id', userId);
-    setActingId(null);
-    if (error) {
-      toast.error(error.message || '更新に失敗しました');
-      return;
-    }
-    toast.success(status === 'active' ? '承認しました' : '却下しました');
-    loadPending();
-  };
 
   if (loading) {
     return (

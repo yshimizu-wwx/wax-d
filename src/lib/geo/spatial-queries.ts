@@ -27,10 +27,8 @@ export function parseCampaignPolygon(
     // DBが GeoJSON を文字列で返す場合（例: Supabase の geometry 出力）
     if (trimmed.startsWith('{')) {
       try {
-        const obj = JSON.parse(trimmed) as { type?: string; coordinates?: unknown };
-        if (obj?.type === 'Polygon' && Array.isArray(obj?.coordinates)) {
-          return obj as Polygon;
-        }
+        const parsed = parseFieldGeometry(JSON.parse(trimmed));
+        if (parsed) return parsed;
       } catch {
         /* ignore */
       }
@@ -38,9 +36,28 @@ export function parseCampaignPolygon(
     return null;
   }
   if (typeof raw === 'object' && raw !== null && 'type' in raw && 'coordinates' in raw) {
-    const obj = raw as { type: string; coordinates: unknown };
-    if (obj.type === 'Polygon' && Array.isArray(obj.coordinates)) {
-      return obj as Polygon;
+    const parsed = parseFieldGeometry(raw as { type: string; coordinates: unknown });
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+/**
+ * 畑の area_coordinates 用。Polygon または MultiPolygon（PostGIS の geometry）を Polygon に正規化する。
+ * 表示用に「農家が登録した畑の枠」を1ポリゴンとして描画するために使用。
+ */
+export function parseFieldGeometry(
+  raw: { type?: string; coordinates?: unknown } | null | undefined
+): Polygon | null {
+  if (raw == null || !raw?.coordinates) return null;
+  const coords = raw.coordinates;
+  if (raw.type === 'Polygon' && Array.isArray(coords) && coords.length > 0) {
+    return { type: 'Polygon', coordinates: coords as number[][][] };
+  }
+  if (raw.type === 'MultiPolygon' && Array.isArray(coords) && coords.length > 0) {
+    const first = coords[0];
+    if (Array.isArray(first) && first.length > 0) {
+      return { type: 'Polygon', coordinates: first as number[][][] };
     }
   }
   return null;

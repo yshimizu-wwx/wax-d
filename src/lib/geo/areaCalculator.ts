@@ -101,12 +101,20 @@ export function coordinatesToPolygon(coordinates: Position[]): Polygon {
  * const layer = e.layer;
  * const polygon = leafletLayerToGeoJSON(layer);
  */
-export function leafletLayerToGeoJSON(layer: any): Polygon {
+interface LeafletLatLng {
+  lat: number;
+  lng: number;
+}
+/** Leaflet.draw の CREATED イベントで取得できるレイヤー形状（getLatLngs を持つ） */
+export interface LeafletDrawLayer {
+  getLatLngs(): LeafletLatLng[][];
+}
+export function leafletLayerToGeoJSON(layer: LeafletDrawLayer): Polygon {
   // Leafletのレイヤーから座標を取得
   const latLngs = layer.getLatLngs()[0]; // 外周のみ取得
 
   // [lng, lat]形式に変換
-  const coordinates: Position[] = latLngs.map((latLng: any) => [
+  const coordinates: Position[] = latLngs.map((latLng: LeafletLatLng) => [
     latLng.lng,
     latLng.lat,
   ]);

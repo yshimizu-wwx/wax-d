@@ -219,6 +219,14 @@ export async function setWorkRequestConverted(
   return workRequestService.setWorkRequestConverted(supabase, workRequestId, providerId, campaignId);
 }
 
+/** 依頼を案件化せず拒否する（業者用） */
+export async function setWorkRequestRejected(
+  workRequestId: string,
+  providerId: string
+): Promise<{ success: boolean; error?: string }> {
+  return workRequestService.setWorkRequestRejected(supabase, workRequestId, providerId);
+}
+
 export async function fetchFieldsByFarmer(farmerId: string): Promise<Field[]> {
   return fieldService.fetchFieldsByFarmer(supabase, farmerId);
 }

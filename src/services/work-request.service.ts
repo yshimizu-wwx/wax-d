@@ -154,3 +154,24 @@ export async function setWorkRequestConverted(
   }
   return { success: true };
 }
+
+/**
+ * 業者が依頼を案件化しない場合に拒否する。
+ */
+export async function setWorkRequestRejected(
+  supabase: SupabaseClient,
+  workRequestId: string,
+  providerId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('work_requests')
+    .update({ status: 'rejected' })
+    .eq('id', workRequestId)
+    .eq('provider_id', providerId);
+
+  if (error) {
+    console.error('Error rejecting work request:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}

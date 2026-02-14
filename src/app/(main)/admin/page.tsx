@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -71,7 +72,8 @@ interface BillingItem {
   has_unbilled: boolean;
 }
 
-export default function AdminDashboardPage() {
+function AdminDashboardContent() {
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
@@ -80,6 +82,14 @@ export default function AdminDashboardPage() {
   const [recruitmentList, setRecruitmentList] = useState<RecruitmentItem[]>([]);
   const [operationList, setOperationList] = useState<OperationItem[]>([]);
   const [billingList, setBillingList] = useState<BillingItem[]>([]);
+
+  useEffect(() => {
+    const warn = searchParams.get('warn');
+    if (warn === 'initial-booking-failed') {
+      toast.warning('案件は作成しました。依頼との紐付けに失敗したため、最初の申込は手動で登録してください。');
+      window.history.replaceState({}, '', '/admin');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -663,5 +673,13 @@ export default function AdminDashboardPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={<AppLoader />}>
+      <AdminDashboardContent />
+    </Suspense>
   );
 }

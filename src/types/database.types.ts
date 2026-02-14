@@ -859,6 +859,7 @@ export type Database = {
           desired_start_date: string | null
           estimated_area_10r: number | null
           farmer_id: string
+          field_ids: string[] | null
           id: string
           location: string | null
           notes: string | null
@@ -882,6 +883,7 @@ export type Database = {
           desired_start_date?: string | null
           estimated_area_10r?: number | null
           farmer_id: string
+          field_ids?: string[] | null
           id?: string
           location?: string | null
           notes?: string | null
@@ -905,6 +907,7 @@ export type Database = {
           desired_start_date?: string | null
           estimated_area_10r?: number | null
           farmer_id?: string
+          field_ids?: string[] | null
           id?: string
           location?: string | null
           notes?: string | null
